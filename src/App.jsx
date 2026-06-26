@@ -235,7 +235,7 @@ const C = {
   sage:"#8B9E8A", sageLt:"rgba(139,158,138,0.15)", sageDk:"#4d6b4c",
   warm:"#C4A882", done:"#72ad6a", doneLt:"rgba(114,173,106,0.13)",
   surface:"#FFFFFF", bg:"#F5F3EF", border:"#E5E1D8", borderSt:"#C8C4BA",
-  text:"#2A2A2A", muted:"#888888", subtle:"#736D60",
+  text:"#2A2A2A", muted:"#6E6E6E", subtle:"#736D60",
 };
 
 function Chk({size=14,color="#fff"}) {
@@ -306,8 +306,9 @@ function SetupScreen({initName,initDate,isEdit,onBack,onSave}) {
         <div style={{position:"absolute",top:0,left:0,right:0,background:C.surface,
           borderBottom:`1px solid ${C.border}`,padding:"env(safe-area-inset-top,0px) 20px 0",
           display:"flex",alignItems:"center",gap:12,minHeight:56}}>
-          <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",
-            color:C.muted,fontSize:24,padding:8,margin:-8,
+          <button onClick={onBack} aria-label="Back" style={{background:"none",border:"none",cursor:"pointer",
+            color:C.muted,fontSize:24,width:44,height:44,display:"flex",alignItems:"center",
+            justifyContent:"center",flexShrink:0,marginLeft:-10,
             WebkitTapHighlightColor:"transparent"}}>←</button>
           <span style={{fontSize:17,fontWeight:600,color:C.text}}>Race settings</span>
         </div>
@@ -410,8 +411,9 @@ function EditDayScreen({dateKey:dk,entry,onSave,onBack}) {
       <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,
         padding:"env(safe-area-inset-top,0px) 20px 0",
         display:"flex",alignItems:"center",gap:14,minHeight:56}}>
-        <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",
-          color:C.muted,fontSize:24,padding:8,margin:-8,
+        <button onClick={onBack} aria-label="Back" style={{background:"none",border:"none",cursor:"pointer",
+          color:C.muted,fontSize:24,width:44,height:44,display:"flex",alignItems:"center",
+          justifyContent:"center",flexShrink:0,marginLeft:-10,
           WebkitTapHighlightColor:"transparent"}}>←</button>
         <div style={{flex:1}}>
           <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:".08em",color:C.muted}}>Edit workout</div>
@@ -449,7 +451,7 @@ function EditDayScreen({dateKey:dk,entry,onSave,onBack}) {
           placeholder="How it went · conditions · how you felt…"
           value={notes} onChange={e=>setNotes(e.target.value)}/>
 
-        <div style={{display:"flex",alignItems:"center",gap:14,marginTop:20,cursor:"pointer"}}
+        <div style={{display:"flex",alignItems:"center",gap:14,marginTop:12,padding:"8px 0",cursor:"pointer"}}
           onClick={()=>setCompleted(c=>!c)}>
           <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,
             border:completed?"none":`2px solid ${C.borderSt}`,
@@ -701,10 +703,10 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
               </div>
           }
           <button onClick={()=>setSheetOpen(true)} aria-label="More options"
-            style={{width:36,height:36,borderRadius:"50%",border:"none",
+            style={{width:44,height:44,borderRadius:"50%",border:"none",
               background:"transparent",color:C.muted,fontSize:24,lineHeight:1,
               cursor:"pointer",display:"flex",alignItems:"center",
-              justifyContent:"center",flexShrink:0,marginTop:8,
+              justifyContent:"center",flexShrink:0,marginTop:10,
               WebkitTapHighlightColor:"transparent"}}>⋯</button>
         </div>
 
@@ -783,10 +785,11 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
                   <div style={{display:"flex",gap:8}}>
                     {FEELINGS.map(f=>(
                       <button key={f.value} onClick={()=>updDay(viewKey,{feeling:f.value})}
-                        title={f.label}
+                        title={f.label} aria-label={f.label}
                         style={{fontSize:22,background:"none",
-                          border:`1px solid ${C.border}`,borderRadius:10,
-                          padding:"6px 8px",cursor:"pointer",
+                          border:`1px solid ${C.border}`,borderRadius:12,
+                          width:44,height:44,display:"flex",alignItems:"center",
+                          justifyContent:"center",flexShrink:0,cursor:"pointer",
                           WebkitTapHighlightColor:"transparent"}}>
                         {f.emoji}
                       </button>
@@ -830,9 +833,11 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
                           color:C.muted,fontSize:11,fontWeight:600,textDecoration:"underline",
                           padding:0,WebkitTapHighlightColor:"transparent"}}>New conversation</button>
                     )}
-                    <button onClick={()=>setCoachOpen(false)}
-                      style={{marginLeft:"auto",background:"none",border:"none",
-                        cursor:"pointer",color:C.muted,fontSize:18,lineHeight:1,padding:2,
+                    <button onClick={()=>setCoachOpen(false)} aria-label="Close coach"
+                      style={{marginLeft:"auto",marginRight:-10,marginTop:-8,marginBottom:-8,
+                        background:"none",border:"none",cursor:"pointer",color:C.muted,
+                        fontSize:20,lineHeight:1,width:44,height:44,display:"flex",
+                        alignItems:"center",justifyContent:"center",flexShrink:0,
                         WebkitTapHighlightColor:"transparent"}}>×</button>
                   </div>
 
@@ -869,7 +874,7 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
                   {/* Conversation starter — one-tap, only before any chat / typing */}
                   {messages.length===0&&!input.trim()&&(
                     <button onClick={startCoach} disabled={sending}
-                      style={{width:"100%",padding:"11px 14px",background:C.surface,
+                      style={{width:"100%",padding:"13px 14px",background:C.surface,
                         color:C.sageDk,border:`1px solid ${C.sage}`,borderRadius:12,
                         fontFamily:"inherit",fontSize:14,fontWeight:600,
                         cursor:sending?"default":"pointer",marginBottom:10,
@@ -899,11 +904,11 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
                       onKeyDown={ev=>{ if (ev.key==="Enter"){ ev.preventDefault(); sendCoach(); } }}
                       placeholder="Ask the coach…" disabled={sending}
                       style={{flex:1,border:`1px solid ${C.border}`,borderRadius:12,
-                        padding:"11px 14px",fontFamily:"inherit",fontSize:15,color:C.text,
+                        padding:"12px 14px",fontFamily:"inherit",fontSize:15,color:C.text,
                         background:C.surface,outline:"none",boxSizing:"border-box",
                         WebkitAppearance:"none"}}/>
                     <button onClick={sendCoach} disabled={sending||!input.trim()}
-                      style={{padding:"11px 16px",background:input.trim()&&!sending?C.sage:C.border,
+                      style={{padding:"14px 18px",background:input.trim()&&!sending?C.sage:C.border,
                         color:"#fff",border:"none",borderRadius:12,fontFamily:"inherit",
                         fontSize:14,fontWeight:600,
                         cursor:input.trim()&&!sending?"pointer":"default",flexShrink:0,
@@ -946,8 +951,8 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
                 <button key={a.label}
                   onClick={()=>{setSheetOpen(false);updDay(viewKey,{workout:`${a.emoji} ${a.label}`,km:null,kmDone:null,completed:false});}}
                   style={{fontSize:14,color:C.text,background:C.bg,
-                    border:`1px solid ${C.border}`,borderRadius:20,
-                    padding:"9px 15px",cursor:"pointer",fontFamily:"inherit",
+                    border:`1px solid ${C.border}`,borderRadius:22,
+                    padding:"12px 16px",cursor:"pointer",fontFamily:"inherit",
                     WebkitTapHighlightColor:"transparent"}}>
                   {a.emoji} {a.label}
                 </button>
@@ -1053,11 +1058,13 @@ function WeekView({today,plan,wkOff,setWkOff,onEdit}) {
                   )}
                 </div>
               )}
-              <div style={{width:28,height:28,borderRadius:"50%",
-                background:e.completed?C.done:C.bg,
-                border:`1.5px solid ${e.completed?C.done:C.border}`,
-                display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                {e.completed&&<Chk size={13}/>}
+              {/* Passive completion-status indicator (the whole row opens edit). */}
+              <div style={{width:24,display:"flex",justifyContent:"center",
+                alignItems:"center",flexShrink:0}}>
+                {e.completed
+                  ? <div style={{width:22,height:22,borderRadius:"50%",background:C.done,
+                      display:"flex",alignItems:"center",justifyContent:"center"}}><Chk size={12}/></div>
+                  : <div style={{width:8,height:8,borderRadius:"50%",background:C.border}}/>}
               </div>
             </div>
           </div>
