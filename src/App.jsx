@@ -556,7 +556,7 @@ function useSwipe(onLeft, onRight) {
   };
 }
 
-function TodayView({plan,updDay,onEdit,raceName,raceDate,dayOff,setDayOff}) {
+function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
   const viewKey=offsetDate(dayOff);
   const e=plan[viewKey]||{};
   const isToday=dayOff===0;
@@ -565,22 +565,6 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate,dayOff,setDayOff}) {
   const [sheetOpen,setSheetOpen]=useState(false);   // ⋯ edit-actions bottom sheet
   const [direction,setDirection]=useState(null);    // 'left' | 'right' — day-slide direction
   const [animating,setAnimating]=useState(false);   // day-change slide in progress
-
-  // ── AI coach chat state ─────────────────────────────────────────────────────
-  const [coachOpen,setCoachOpen]=useState(false);
-  const [messages,setMessages]=useState([]);   // [{role:"user"|"assistant",content}]
-  const [input,setInput]=useState("");
-  const [sending,setSending]=useState(false);
-  const [coachError,setCoachError]=useState(false);
-  const coachKey=`coach-${viewKey}`;
-  // Load this day's saved conversation; reset the chat whenever the day changes.
-  useEffect(()=>{
-    setCoachOpen(false); setInput(""); setSending(false); setCoachError(false);
-    let stored=[];
-    try { const raw=localStorage.getItem(coachKey); if (raw) stored=JSON.parse(raw); } catch {}
-    setMessages(Array.isArray(stored)?stored:[]);
-  },[viewKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const persistCoach=(msgs)=>{ try { localStorage.setItem(coachKey,JSON.stringify(msgs)); } catch {} };
 
   const navDay=(delta)=>{
     setEditingKm(false); setSheetOpen(false);
@@ -619,80 +603,6 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate,dayOff,setDayOff}) {
   const mTarget=mDays.reduce((s,dk)=>s+plannedKm(plan[dk]),0);
   const mDone=mDays.reduce((s,dk)=>s+actualKm(plan[dk]),0);
 
-  // ── AI coach ──────────────────────────────────────────────────────────────
-  const feelingLabel=(v)=>FEELINGS.find(f=>f.value===v)?.label||null;
-  const feelingEmoji=(v)=>FEELINGS.find(f=>f.value===v)?.emoji||null;
-  const buildCoachContext=()=>{
-    const today=todayStr();
-    // Give the coach the same view the athlete has: the full plan in both
-    // directions. The server (buildContextBlock) decides how much detail to
-    // render so the prompt stays within sensible token limits.
-    const dates=Object.keys(plan).filter(dk=>plan[dk]?.workout?.trim()).sort();
-    const history=[];   // every completed session, oldest first
-    const upcoming=[];  // every remaining planned session through race day
-    for (const dk of dates) {
-      const re=plan[dk];
-      if (re.completed) {
-        history.push({date:dk,workout:re.workout.trim(),plannedKm:plannedKm(re),
-          kmDone:actualKm(re),feeling:feelingLabel(re.feeling),emoji:feelingEmoji(re.feeling),
-          notes:re.notes?.trim()||null});
-      } else if (dk>today&&(!raceDate||dk<=raceDate)) {
-        upcoming.push({date:dk,workout:re.workout.trim(),km:plannedKm(re)});
-      }
-    }
-    const dleft=daysUntil(raceDate);
-    return {
-      raceName,raceDate,today,daysUntilRace:dleft,phase:phaseFor(dleft),
-      day:{date:viewKey,label:`${dayName}, ${dayFull}`,workout:e.workout,
-        plannedKm:target,actualKm:ran,completed:!!e.completed,feeling:feelingLabel(e.feeling)},
-      history,
-      upcoming,
-      week:{doneKm:wkDone,plannedKm:wkTarget},
-      month:{doneKm:mDone,plannedKm:mTarget},
-    };
-  };
-  // Send `base` (the conversation so far) to the coach and stream the reply.
-  // An empty assistant message is appended for the live stream / typing dots.
-  const sendToCoach=async(base)=>{
-    setSending(true); setCoachError(false);
-    setMessages([...base,{role:"assistant",content:""}]);
-    try {
-      const resp=await fetch("/api/coach",{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({...buildCoachContext(),messages:base}),
-      });
-      if (!resp.ok||!resp.body) throw new Error("bad response");
-      const reader=resp.body.getReader(), decoder=new TextDecoder();
-      let acc="";
-      for (;;) {
-        const {done,value}=await reader.read();
-        if (done) break;
-        acc+=decoder.decode(value,{stream:true});
-        setMessages([...base,{role:"assistant",content:acc}]);
-      }
-      if (!acc.trim()) throw new Error("empty response");
-      const final=[...base,{role:"assistant",content:acc}];
-      setMessages(final); persistCoach(final);
-    } catch {
-      setCoachError(true);
-      setMessages(base);            // drop the streaming placeholder
-    } finally {
-      setSending(false);
-    }
-  };
-  const startCoach=()=>sendToCoach([{role:"user",content:"Tell me about today's session"}]);
-  const sendCoach=()=>{
-    const text=input.trim();
-    if (!text||sending) return;
-    setInput("");
-    sendToCoach([...messages,{role:"user",content:text}]);
-  };
-  const retryCoach=()=>{ if (!sending&&messages.length) sendToCoach(messages); };
-  const newCoachChat=()=>{
-    setMessages([]); setInput(""); setCoachError(false);
-    try { localStorage.removeItem(coachKey); } catch {}
-  };
-
   // Shared style for the bottom-sheet action rows.
   const sheetRow={display:"flex",alignItems:"center",gap:6,width:"100%",
     background:"none",border:"none",borderRadius:12,padding:"14px 10px",
@@ -700,7 +610,7 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate,dayOff,setDayOff}) {
     textAlign:"left",WebkitTapHighlightColor:"transparent"};
 
   return (
-    <div {...swipe} style={{padding:"16px 16px 80px"}}>
+    <div {...swipe} style={{padding:"16px 16px 24px"}}>
       <style>{"@keyframes checkPop{0%{transform:scale(1)}50%{transform:scale(1.15)}100%{transform:scale(1)}}@keyframes slideInLeft{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes slideInRight{from{transform:translateX(-100%);opacity:0}to{transform:translateX(0);opacity:1}}"}</style>
       {/* Stats */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
@@ -903,111 +813,14 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate,dayOff,setDayOff}) {
       </div>{/* /key wrapper */}
       </div>{/* /overflow wrapper */}
 
-      {/* AI coach — chat panel docked above the fixed bottom button, scrollable. */}
-      {e.workout?.trim()&&coachOpen&&(
-        <div style={{position:"fixed",left:16,right:16,zIndex:40,
-          bottom:"calc(env(safe-area-inset-bottom, 20px) + 16px + 60px)",
-          background:C.sageLt,borderRadius:14,padding:"14px 16px",
-          borderLeft:`3px solid ${C.sage}`,boxShadow:"0 8px 30px rgba(0,0,0,0.2)"}}>
-          <style>{"@keyframes coachBlink{0%,80%,100%{opacity:.25}40%{opacity:1}}"}</style>
-          <div style={{display:"flex",alignItems:"center",marginBottom:10}}>
-            <span style={{fontSize:11,fontWeight:700,color:C.sageDk,
-              textTransform:"uppercase",letterSpacing:".07em"}}>🏃 Coach</span>
-            {messages.length>0&&(
-              <button onClick={newCoachChat}
-                style={{marginLeft:12,background:"none",border:"none",cursor:"pointer",
-                  color:C.muted,fontSize:11,fontWeight:600,textDecoration:"underline",
-                  padding:0,WebkitTapHighlightColor:"transparent"}}>New conversation</button>
-            )}
-          </div>
-
-          {/* Messages */}
-          {messages.length>0&&(
-            <div style={{maxHeight:"40vh",overflowY:"auto",display:"flex",
-              flexDirection:"column",gap:8,marginBottom:10}}>
-              {messages.map((m,i)=>(
-                m.role==="assistant"
-                  ? <div key={i} style={{alignSelf:"flex-start",maxWidth:"92%",
-                      background:C.surface,borderLeft:`3px solid ${C.sage}`,
-                      borderRadius:"4px 12px 12px 4px",padding:"10px 12px"}}>
-                      {m.content
-                        ? <p style={{margin:0,fontSize:14,lineHeight:1.6,color:C.text,
-                            whiteSpace:"pre-wrap"}}>{m.content}</p>
-                        : <div style={{display:"flex",gap:5,padding:"2px 0"}}>
-                            {[0,1,2].map(j=>(
-                              <span key={j} style={{width:7,height:7,borderRadius:"50%",
-                                background:C.sage,display:"inline-block",
-                                animation:`coachBlink 1.2s ${j*0.16}s infinite ease-in-out`}}/>
-                            ))}
-                          </div>}
-                    </div>
-                  : <div key={i} style={{alignSelf:"flex-end",maxWidth:"85%",
-                      background:C.surface,border:`1px solid ${C.border}`,
-                      borderRadius:"12px 12px 4px 12px",padding:"10px 12px"}}>
-                      <p style={{margin:0,fontSize:14,lineHeight:1.55,color:C.text,
-                        whiteSpace:"pre-wrap"}}>{m.content}</p>
-                    </div>
-              ))}
-            </div>
-          )}
-
-          {/* Conversation starter — one-tap, only before any chat / typing */}
-          {messages.length===0&&!input.trim()&&(
-            <button onClick={startCoach} disabled={sending}
-              style={{width:"100%",padding:"13px 14px",background:C.surface,
-                color:C.sageDk,border:`1px solid ${C.sage}`,borderRadius:12,
-                fontFamily:"inherit",fontSize:14,fontWeight:600,
-                cursor:sending?"default":"pointer",marginBottom:10,
-                WebkitTapHighlightColor:"transparent"}}>
-              Tell me about today's session
-            </button>
-          )}
-
-          {coachError&&(
-            <div style={{marginBottom:10}}>
-              <p style={{margin:"0 0 8px",fontSize:13,color:C.muted,lineHeight:1.5}}>
-                Couldn't reach the coach right now. Check your connection and try again.
-              </p>
-              {messages.length>0&&(
-                <button onClick={retryCoach} style={{fontSize:13,fontWeight:600,
-                  color:C.sageDk,background:C.surface,border:`1px solid ${C.sage}`,
-                  borderRadius:10,padding:"8px 14px",cursor:"pointer",fontFamily:"inherit",
-                  WebkitTapHighlightColor:"transparent"}}>↻ Try again</button>
-              )}
-            </div>
-          )}
-
-          {/* Input row */}
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <input type="text" value={input}
-              onChange={ev=>setInput(ev.target.value)}
-              onKeyDown={ev=>{ if (ev.key==="Enter"){ ev.preventDefault(); sendCoach(); } }}
-              placeholder="Ask the coach…" disabled={sending}
-              style={{flex:1,border:`1px solid ${C.border}`,borderRadius:12,
-                padding:"12px 14px",fontFamily:"inherit",fontSize:15,color:C.text,
-                background:C.surface,outline:"none",boxSizing:"border-box",
-                WebkitAppearance:"none"}}/>
-            <button onClick={sendCoach} disabled={sending||!input.trim()}
-              style={{padding:"14px 18px",background:input.trim()&&!sending?C.sage:C.border,
-                color:"#fff",border:"none",borderRadius:12,fontFamily:"inherit",
-                fontSize:14,fontWeight:600,
-                cursor:input.trim()&&!sending?"pointer":"default",flexShrink:0,
-                WebkitTapHighlightColor:"transparent"}}>Send</button>
-          </div>
-        </div>
-      )}
-
-      {/* Coach toggle — always visible, fixed at the viewport bottom. */}
+      {/* Ask the coach — opens the full-screen coach. */}
       {e.workout?.trim()&&(
-        <button onClick={()=>setCoachOpen(o=>!o)}
-          style={{position:"fixed",left:16,right:16,zIndex:41,
-            bottom:"calc(env(safe-area-inset-bottom, 20px) + 16px)",
-            padding:"14px",borderRadius:12,fontFamily:"inherit",fontSize:15,fontWeight:600,
-            cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,
-            background:C.surface,color:C.sageDk,border:`1.5px solid ${C.sage}`,
-            boxShadow:"0 6px 20px rgba(0,0,0,0.18)",
-            WebkitTapHighlightColor:"transparent"}}>
-          {coachOpen?"✕ Close coach":"💬 Ask the coach"}
+        <button onClick={onOpenCoach} style={{width:"100%",marginTop:16,padding:"14px",
+          background:"transparent",color:C.sageDk,border:`1.5px solid ${C.sage}`,borderRadius:12,
+          fontFamily:"inherit",fontSize:15,fontWeight:600,cursor:"pointer",
+          display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+          WebkitTapHighlightColor:"transparent"}}>
+          💬 Ask the coach
         </button>
       )}
 
@@ -1243,6 +1056,311 @@ function MonthView({today,plan,moOff,setMoOff,onGoToDay}) {
   );
 }
 
+// ─── Journey view ───────────────────────────────────────────────────────────────
+const PHASES = [
+  { name: 'Base', weeks: [1,2,3,4], description: 'Building your running foundation. Tendons, joints and fascia adapting to the load. Keep everything easy.' },
+  { name: 'Build', weeks: [5,6,7,8], description: 'First quality sessions introduced. Volume increases deliberately. Your aerobic engine is growing.' },
+  { name: 'Peak', weeks: [9,10,11,12], description: 'Highest training load of the plan. Your longest runs happen here. Trust the process even when it feels hard.' },
+  { name: 'Taper', weeks: [13,14,15,16], description: 'Volume drops, sharpness maintained. Your body is consolidating 16 weeks of work. Resist the urge to do more.' },
+  { name: 'Race Week', weeks: [17], description: 'Stay off your feet. Eat well. Sleep. The hay is in the barn.' },
+];
+const DELOAD_WEEKS = [4,8,12];   // cutback/recovery weeks within the plan
+
+function JourneyView({plan,today,raceDate,onGoToWeek}) {
+  const planStart=new Date(2026,5,29);                 // Week 1 = Mon Jun 29 2026
+  const weekMonday=(N)=>{ const d=new Date(planStart); d.setDate(d.getDate()+(N-1)*7); return d; };
+  const weekDays=(N)=>{ const m=weekMonday(N); return Array.from({length:7},(_,i)=>{ const d=new Date(m); d.setDate(m.getDate()+i); return dateKey(d); }); };
+  const fmtMD=(d)=>d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+
+  const todayD=new Date(today+"T00:00:00");
+  const curWeek=Math.min(17,Math.max(1,Math.floor((todayD-planStart)/(7*86400000))+1));
+  const curPhase=PHASES.find(p=>p.weeks.includes(curWeek))||PHASES[0];
+
+  // Plan-wide totals + date progress for the summary card.
+  let totalDone=0, totalPlanned=0;
+  for (const k in plan) { totalDone+=actualKm(plan[k]); totalPlanned+=plannedKm(plan[k]); }
+  const raceD=raceDate?new Date(raceDate+"T00:00:00"):planStart;
+  const dateProgress=Math.max(0,Math.min(1,(todayD-planStart)/((raceD-planStart)||1)));
+  const daysLeft=daysUntil(raceDate);
+
+  const weekStats=(N)=>{
+    const entries=weekDays(N).map(dk=>plan[dk]||{});
+    const planned=entries.reduce((s,e)=>s+plannedKm(e),0);
+    const done=entries.reduce((s,e)=>s+actualKm(e),0);
+    const longRun=entries.reduce((mx,e)=>Math.max(mx,plannedKm(e)),0);
+    return {entries,planned,done,longRun};
+  };
+
+  const callout=(emoji,text,accent)=>(
+    <div style={{display:"flex",alignItems:"center",gap:10,margin:"6px 0 6px 17px",
+      borderRadius:14,padding:"12px 14px",
+      background:accent==="warm"?"rgba(196,168,130,0.2)":accent==="muted"?"rgba(122,138,154,0.12)":C.sageLt}}>
+      <span style={{fontSize:20,flexShrink:0}}>{emoji}</span>
+      <span style={{fontSize:13,fontWeight:600,
+        color:accent==="warm"?"#8a6a37":accent==="muted"?"#5f6b75":C.sageDk}}>{text}</span>
+    </div>
+  );
+
+  return (
+    <div style={{padding:"16px 16px 32px"}}>
+      {/* Summary card */}
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:18,padding:18,marginBottom:26}}>
+        <div style={{fontSize:13,fontWeight:700,color:C.sageDk,textTransform:"uppercase",letterSpacing:".06em"}}>
+          Week {curWeek} of 17 · {curPhase.name}
+        </div>
+        <div style={{height:8,background:"rgba(196,168,130,0.25)",borderRadius:4,marginTop:12,overflow:"hidden"}}>
+          <div style={{height:"100%",width:`${Math.round(dateProgress*100)}%`,background:C.sage}}/>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginTop:14}}>
+          <div>
+            <div style={{fontFamily:"monospace",fontSize:18,fontWeight:700,color:C.text}}>
+              <span style={{color:totalDone>0?C.done:C.text}}>{fmtKm(totalDone)}</span> / {fmtKm(totalPlanned)} km
+            </div>
+            <div style={{fontSize:10,color:C.muted,marginTop:2,textTransform:"uppercase",letterSpacing:".05em"}}>done / planned</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontFamily:"monospace",fontSize:18,fontWeight:700,color:C.sage}}>{daysLeft??"—"}</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:2,textTransform:"uppercase",letterSpacing:".05em"}}>days to race</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Phases */}
+      {PHASES.map((phase,pi)=>{
+        const phasePlanned=phase.weeks.reduce((s,N)=>s+weekStats(N).planned,0);
+        return (
+          <div key={phase.name} style={{marginBottom:30}}>
+            <div style={{marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"baseline",gap:8}}>
+                <span style={{fontSize:22,fontWeight:800,color:C.text}}>{phase.name}</span>
+                <span style={{fontSize:11,fontWeight:700,color:C.sage,textTransform:"uppercase",letterSpacing:".08em"}}>Phase {pi+1}</span>
+              </div>
+              <div style={{fontSize:13,color:C.muted,lineHeight:1.5,marginTop:5}}>{phase.description}</div>
+              <div style={{fontSize:12,fontWeight:600,color:C.sageDk,fontFamily:"monospace",marginTop:6}}>{fmtKm(phasePlanned)} km planned</div>
+            </div>
+
+            {phase.weeks.map(N=>{
+              const {entries,planned,done,longRun}=weekStats(N);
+              const days=weekDays(N);
+              const mon=days[0];
+              const isCurrent=N===curWeek;
+              const isDeload=DELOAD_WEEKS.includes(N);
+              const started=new Date(mon+"T00:00:00")<=todayD;
+              const pct=planned>0?Math.min(1,done/planned):0;
+              const range=`${fmtMD(new Date(mon+"T00:00:00"))} – ${fmtMD(new Date(days[6]+"T00:00:00"))}`;
+              return (
+                <div key={N}>
+                  <div onClick={()=>onGoToWeek(mon)} style={{cursor:"pointer",
+                    borderLeft:`3px solid ${isCurrent?C.sage:"transparent"}`,
+                    padding:"12px 0 12px 14px",WebkitTapHighlightColor:"transparent"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                        <span style={{fontSize:14,fontWeight:700,color:isCurrent?C.sageDk:C.text}}>Wk {N}</span>
+                        <span style={{fontSize:12,color:C.muted}}>· {range}</span>
+                        {isDeload&&<span style={{fontSize:10,fontWeight:700,color:C.sageDk,
+                          background:C.sageLt,borderRadius:20,padding:"2px 8px"}}>↓ Recovery</span>}
+                      </div>
+                      {longRun>0&&(
+                        <div style={{flexShrink:0,textAlign:"right"}}>
+                          <span style={{fontFamily:"monospace",fontSize:16,fontWeight:700,color:C.sage}}>{fmtKm(longRun)}</span>
+                          <span style={{fontSize:11,color:C.muted}}> km long</span>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{height:6,background:"rgba(196,168,130,0.3)",borderRadius:3,marginTop:8,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:`${Math.round(pct*100)}%`,background:C.done}}/>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
+                      <span style={{fontSize:12,color:C.muted,fontFamily:"monospace"}}>
+                        {started
+                          ? <><span style={{color:done>0?C.done:C.muted}}>{fmtKm(done)}</span> / {fmtKm(planned)} km</>
+                          : `${fmtKm(planned)} km planned`}
+                      </span>
+                      <div style={{display:"flex",gap:4}}>
+                        {entries.map((e,i)=>{
+                          const c=e.completed?C.done:(e.km||0)>0?C.warm:e.workout?.trim()?C.sage:null;
+                          return <span key={i} style={{width:7,height:7,borderRadius:"50%",
+                            background:c||"transparent",border:c?"none":`1px solid ${C.border}`}}/>;
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                  {N===11&&callout("🏔","Peak week — your hardest week. 32km long run.")}
+                  {isDeload&&callout("↓","Recovery week — planned reduction in load","muted")}
+                  {N===17&&callout("🏆","Marathon Day","warm")}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Coach screen (full-screen chat) ────────────────────────────────────────────
+function CoachScreen({viewKey,plan,raceName,raceDate,startDate,onBack}) {
+  const [messages,setMessages]=useState([]);   // [{role:"user"|"assistant",content}]
+  const [input,setInput]=useState("");
+  const [sending,setSending]=useState(false);
+  const [coachError,setCoachError]=useState(false);
+  const coachKey=`coach-${viewKey}`;
+
+  // Load this day's saved conversation on mount.
+  useEffect(()=>{
+    let stored=[];
+    try { const raw=localStorage.getItem(coachKey); if (raw) stored=JSON.parse(raw); } catch {}
+    setMessages(Array.isArray(stored)?stored:[]);
+  },[coachKey]);
+  const persistCoach=(msgs)=>{ try { localStorage.setItem(coachKey,JSON.stringify(msgs)); } catch {} };
+
+  // ── Coach context — the athlete's full plan view for this day ──
+  const e=plan[viewKey]||{};
+  const d=new Date(viewKey+"T00:00:00");
+  const dayName=d.toLocaleDateString("en-US",{weekday:"long"});
+  const dayFull=d.toLocaleDateString("en-US",{month:"long",day:"numeric"});
+  const target=plannedKm(e), ran=actualKm(e);
+  const wk=weekOf(0);
+  const wkTarget=wk.reduce((s,dk)=>s+plannedKm(plan[dk]),0);
+  const wkDone=wk.reduce((s,dk)=>s+actualKm(plan[dk]),0);
+  const now=new Date();
+  const mDays=monthGrid(now.getFullYear(),now.getMonth()).filter(Boolean);
+  const mTarget=mDays.reduce((s,dk)=>s+plannedKm(plan[dk]),0);
+  const mDone=mDays.reduce((s,dk)=>s+actualKm(plan[dk]),0);
+  const feelingLabel=(v)=>FEELINGS.find(f=>f.value===v)?.label||null;
+  const feelingEmoji=(v)=>FEELINGS.find(f=>f.value===v)?.emoji||null;
+  const buildCoachContext=()=>{
+    const today=todayStr();
+    const dates=Object.keys(plan).filter(dk=>plan[dk]?.workout?.trim()).sort();
+    const history=[], upcoming=[];
+    for (const dk of dates) {
+      const re=plan[dk];
+      if (re.completed) {
+        history.push({date:dk,workout:re.workout.trim(),plannedKm:plannedKm(re),
+          kmDone:actualKm(re),feeling:feelingLabel(re.feeling),emoji:feelingEmoji(re.feeling),
+          notes:re.notes?.trim()||null});
+      } else if (dk>today&&(!raceDate||dk<=raceDate)) {
+        upcoming.push({date:dk,workout:re.workout.trim(),km:plannedKm(re)});
+      }
+    }
+    const dleft=daysUntil(raceDate);
+    return {
+      raceName,raceDate,today,daysUntilRace:dleft,phase:phaseFor(dleft),
+      day:{date:viewKey,label:`${dayName}, ${dayFull}`,workout:e.workout,
+        plannedKm:target,actualKm:ran,completed:!!e.completed,feeling:feelingLabel(e.feeling)},
+      history,upcoming,
+      week:{doneKm:wkDone,plannedKm:wkTarget},
+      month:{doneKm:mDone,plannedKm:mTarget},
+    };
+  };
+
+  const sendToCoach=async(base)=>{
+    setSending(true); setCoachError(false);
+    setMessages([...base,{role:"assistant",content:""}]);
+    try {
+      const resp=await fetch("/api/coach",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({...buildCoachContext(),messages:base})});
+      if (!resp.ok||!resp.body) throw new Error("bad response");
+      const reader=resp.body.getReader(), decoder=new TextDecoder();
+      let acc="";
+      for (;;) { const {done,value}=await reader.read(); if (done) break; acc+=decoder.decode(value,{stream:true}); setMessages([...base,{role:"assistant",content:acc}]); }
+      if (!acc.trim()) throw new Error("empty response");
+      const final=[...base,{role:"assistant",content:acc}];
+      setMessages(final); persistCoach(final);
+    } catch { setCoachError(true); setMessages(base); }
+    finally { setSending(false); }
+  };
+  const startCoach=()=>sendToCoach([{role:"user",content:"Tell me about today's session"}]);
+  const sendCoach=()=>{ const text=input.trim(); if (!text||sending) return; setInput(""); sendToCoach([...messages,{role:"user",content:text}]); };
+  const retryCoach=()=>{ if (!sending&&messages.length) sendToCoach(messages); };
+  const newCoachChat=()=>{ setMessages([]); setInput(""); setCoachError(false); try { localStorage.removeItem(coachKey); } catch {} };
+
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:60,background:C.bg,
+      display:"flex",flexDirection:"column",fontFamily:"system-ui,sans-serif"}}>
+      <style>{"@keyframes coachBlink{0%,80%,100%{opacity:.25}40%{opacity:1}}"}</style>
+      {/* Header */}
+      <div style={{flexShrink:0,background:C.surface,borderBottom:`1px solid ${C.border}`,
+        padding:"env(safe-area-inset-top,0px) 12px 0",display:"flex",alignItems:"center",
+        gap:8,minHeight:56}}>
+        <button onClick={onBack} aria-label="Back" style={{background:"none",border:"none",cursor:"pointer",
+          color:C.muted,fontSize:24,width:44,height:44,display:"flex",alignItems:"center",
+          justifyContent:"center",flexShrink:0,WebkitTapHighlightColor:"transparent"}}>←</button>
+        <div style={{flex:1,textAlign:"center",fontSize:16,fontWeight:700,color:C.text}}>Coach</div>
+        {messages.length>0
+          ? <button onClick={newCoachChat} style={{background:"none",border:"none",cursor:"pointer",
+              color:C.muted,fontSize:12,fontWeight:600,textDecoration:"underline",padding:"0 6px",
+              flexShrink:0,WebkitTapHighlightColor:"transparent"}}>New conversation</button>
+          : <div style={{width:44,flexShrink:0}}/>}
+      </div>
+
+      {/* Messages — fills remaining height, scrollable */}
+      <div style={{flex:1,minHeight:0,overflowY:"auto",padding:16,
+        display:"flex",flexDirection:"column",gap:10}}>
+        {messages.length===0&&!input.trim()&&!coachError&&(
+          <button onClick={startCoach} disabled={sending}
+            style={{alignSelf:"stretch",padding:"14px",background:C.surface,
+              color:C.sageDk,border:`1px solid ${C.sage}`,borderRadius:12,
+              fontFamily:"inherit",fontSize:15,fontWeight:600,
+              cursor:sending?"default":"pointer",WebkitTapHighlightColor:"transparent"}}>
+            Tell me about today's session
+          </button>
+        )}
+        {messages.map((m,i)=>(
+          m.role==="assistant"
+            ? <div key={i} style={{alignSelf:"flex-start",maxWidth:"90%",
+                background:C.surface,borderLeft:`3px solid ${C.sage}`,
+                borderRadius:"4px 14px 14px 4px",padding:"11px 14px"}}>
+                {m.content
+                  ? <p style={{margin:0,fontSize:15,lineHeight:1.6,color:C.text,whiteSpace:"pre-wrap"}}>{m.content}</p>
+                  : <div style={{display:"flex",gap:5,padding:"2px 0"}}>
+                      {[0,1,2].map(j=>(<span key={j} style={{width:7,height:7,borderRadius:"50%",
+                        background:C.sage,display:"inline-block",
+                        animation:`coachBlink 1.2s ${j*0.16}s infinite ease-in-out`}}/>))}
+                    </div>}
+              </div>
+            : <div key={i} style={{alignSelf:"flex-end",maxWidth:"85%",
+                background:C.surface,border:`1px solid ${C.border}`,
+                borderRadius:"14px 14px 4px 14px",padding:"11px 14px"}}>
+                <p style={{margin:0,fontSize:15,lineHeight:1.55,color:C.text,whiteSpace:"pre-wrap"}}>{m.content}</p>
+              </div>
+        ))}
+        {coachError&&(
+          <div style={{alignSelf:"stretch"}}>
+            <p style={{margin:"0 0 8px",fontSize:14,color:C.muted,lineHeight:1.5}}>
+              Couldn't reach the coach right now. Check your connection and try again.
+            </p>
+            {messages.length>0&&(
+              <button onClick={retryCoach} style={{fontSize:14,fontWeight:600,
+                color:C.sageDk,background:C.surface,border:`1px solid ${C.sage}`,
+                borderRadius:10,padding:"9px 16px",cursor:"pointer",fontFamily:"inherit",
+                WebkitTapHighlightColor:"transparent"}}>↻ Try again</button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Input bar — pinned at the bottom above the safe area */}
+      <div style={{flexShrink:0,background:C.surface,borderTop:`1px solid ${C.border}`,
+        padding:"10px 16px calc(10px + env(safe-area-inset-bottom,0px))",
+        display:"flex",gap:8,alignItems:"center"}}>
+        <input type="text" value={input}
+          onChange={ev=>setInput(ev.target.value)}
+          onKeyDown={ev=>{ if (ev.key==="Enter"){ ev.preventDefault(); sendCoach(); } }}
+          placeholder="Ask the coach…" disabled={sending}
+          style={{flex:1,border:`1px solid ${C.border}`,borderRadius:12,
+            padding:"12px 14px",fontFamily:"inherit",fontSize:15,color:C.text,
+            background:C.bg,outline:"none",boxSizing:"border-box",WebkitAppearance:"none"}}/>
+        <button onClick={sendCoach} disabled={sending||!input.trim()}
+          style={{padding:"14px 18px",background:input.trim()&&!sending?C.sage:C.border,
+            color:"#fff",border:"none",borderRadius:12,fontFamily:"inherit",fontSize:14,fontWeight:600,
+            cursor:input.trim()&&!sending?"pointer":"default",flexShrink:0,
+            WebkitTapHighlightColor:"transparent"}}>Send</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function App() {
   const [loading,setLoading]=useState(true);
@@ -1292,6 +1410,13 @@ export default function App() {
   const openEdit=(dk)=>{ setEditKey(dk); setScreen("editday"); };
   // Tapping a day in Week/Month jumps to that day in the Today view.
   const goToDay=(dk)=>{ setDayOff(daysUntil(dk)??0); setView("today"); };
+  // Tapping a week in Journey jumps to that week in the Week view.
+  const goToWeek=(mondayDk)=>{
+    const curMon=new Date(weekOf(0)[0]+"T00:00:00").getTime();
+    const tgtMon=new Date(mondayDk+"T00:00:00").getTime();
+    setWkOff(Math.round((tgtMon-curMon)/(7*86400000)));
+    setView("week");
+  };
 
   const today=todayStr();
   const dLeft=daysUntil(raceDate);
@@ -1324,6 +1449,11 @@ export default function App() {
     <EditDayScreen dateKey={editKey} entry={plan[editKey]||{}}
       onBack={()=>setScreen("main")}
       onSave={(u)=>{ updDay(editKey,u); setScreen("main"); }}/>
+  );
+  if(screen==="coach") return (
+    <CoachScreen viewKey={offsetDate(dayOff)} plan={plan}
+      raceName={name} raceDate={raceDate} startDate={startDate}
+      onBack={()=>setScreen("main")}/>
   );
 
   return (
@@ -1410,7 +1540,7 @@ export default function App() {
 
           <div style={{display:"flex",borderTop:`1px solid ${C.border}`,
             marginLeft:-20,marginRight:-20,paddingLeft:20,paddingRight:20}}>
-            {["today","week","month"].map(v=>(
+            {["today","week","month","journey"].map(v=>(
               <button key={v} onClick={()=>{ setView(v); if(v==="today") setDayOff(0); }} style={{
                 flex:1,padding:"13px 0",background:"none",border:"none",
                 borderBottom:`2.5px solid ${view===v?C.sage:"transparent"}`,
@@ -1425,9 +1555,10 @@ export default function App() {
       </div>
 
       <div style={{paddingBottom:32}}>
-        {view==="today"&&<TodayView plan={plan} updDay={updDay} onEdit={openEdit} raceName={name} raceDate={raceDate} dayOff={dayOff} setDayOff={setDayOff}/>}
+        {view==="today"&&<TodayView plan={plan} updDay={updDay} onEdit={openEdit} dayOff={dayOff} setDayOff={setDayOff} onOpenCoach={()=>setScreen("coach")}/>}
         {view==="week"&&<WeekView today={today} plan={plan} wkOff={wkOff} setWkOff={setWkOff} onGoToDay={goToDay}/>}
         {view==="month"&&<MonthView today={today} plan={plan} moOff={moOff} setMoOff={setMoOff} onGoToDay={goToDay}/>}
+        {view==="journey"&&<JourneyView plan={plan} today={today} raceDate={raceDate} onGoToWeek={goToWeek}/>}
       </div>
     </div>
   );
