@@ -344,6 +344,62 @@ function SetupScreen({initName,initAthlete,isEdit,onBack,onSave}) {
   const [a,setA]=useState(initAthlete||"");
   const [n,setN]=useState(initName||"");
   const ok=n.trim();
+
+  // ── Backup: export / import all local data ──
+  const fileRef=useRef(null);
+  const [pendingImport,setPendingImport]=useState(null);   // parsed backup awaiting confirmation
+  const [importError,setImportError]=useState("");
+  const exportData=()=>{
+    const coach={};
+    Object.keys(localStorage).filter(k=>k.startsWith('coach-')).forEach(k=>{ coach[k]=localStorage.getItem(k); });
+    const data={
+      exportedAt:new Date().toISOString(),
+      version:'marathon-v8',
+      plan:localStorage.getItem('marathon-v8'),
+      coach,
+    };
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement('a');
+    link.href=url;
+    link.download=`marathon-backup-${new Date().toISOString().slice(0,10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+  const onFilePick=(ev)=>{
+    const file=ev.target.files&&ev.target.files[0];
+    ev.target.value="";                 // allow re-picking the same file later
+    if (!file) return;
+    setImportError("");
+    const reader=new FileReader();
+    reader.onload=()=>{
+      try {
+        const parsed=JSON.parse(reader.result);
+        if (!parsed||!parsed.plan||!parsed.version) throw new Error("invalid");
+        setPendingImport(parsed);
+      } catch(e) {
+        setPendingImport(null);
+        setImportError("Invalid backup file — please select a valid marathon backup");
+      }
+    };
+    reader.onerror=()=>{ setPendingImport(null); setImportError("Invalid backup file — please select a valid marathon backup"); };
+    reader.readAsText(file);
+  };
+  const confirmImport=()=>{
+    const d=pendingImport;
+    if (!d) return;
+    try {
+      localStorage.setItem('marathon-v8', typeof d.plan==='string'?d.plan:JSON.stringify(d.plan));
+      if (d.coach&&typeof d.coach==='object') {
+        Object.keys(d.coach).forEach(k=>{ if (k.startsWith('coach-')) localStorage.setItem(k, d.coach[k]); });
+      }
+      window.location.reload();
+    } catch(e) {
+      setPendingImport(null);
+      setImportError("Invalid backup file — please select a valid marathon backup");
+    }
+  };
+
   const inp={
     width:"100%",border:`1px solid ${C.border}`,borderRadius:12,
     padding:"14px 16px",fontFamily:"inherit",fontSize:16,color:C.text,
@@ -392,6 +448,51 @@ function SetupScreen({initName,initAthlete,isEdit,onBack,onSave}) {
           {isEdit?"Save changes":"Start training →"}
         </button>
       </div>
+
+      {isEdit&&(
+        <div style={{width:"100%",maxWidth:400,marginTop:18}}>
+          <button onClick={exportData} style={{width:"100%",padding:16,background:C.sage,
+            color:"#fff",border:"none",borderRadius:14,fontFamily:"inherit",fontSize:16,
+            fontWeight:600,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+            📥 Export my data
+          </button>
+          <div style={{fontSize:12,color:C.muted,textAlign:"center",lineHeight:1.5,margin:"12px 6px"}}>
+            Your data is stored on this device only. Export regularly to keep a backup.
+          </div>
+          <button onClick={()=>fileRef.current&&fileRef.current.click()} style={{width:"100%",padding:16,
+            background:C.surface,color:C.sage,border:`1.5px solid ${C.sage}`,borderRadius:14,
+            fontFamily:"inherit",fontSize:16,fontWeight:600,cursor:"pointer",
+            WebkitTapHighlightColor:"transparent"}}>
+            📤 Restore from backup
+          </button>
+          <input ref={fileRef} type="file" accept=".json" onChange={onFilePick} style={{display:"none"}}/>
+          {importError&&(
+            <div style={{marginTop:12,fontSize:13,color:"#c05050",textAlign:"center",lineHeight:1.4}}>
+              {importError}
+            </div>
+          )}
+          {pendingImport&&(
+            <div style={{marginTop:14,padding:16,background:C.surface,border:`1px solid ${C.border}`,
+              borderRadius:14}}>
+              <div style={{fontSize:14,color:C.text,lineHeight:1.5,marginBottom:14}}>
+                This will restore your training data. Your current data will be replaced. Continue?
+              </div>
+              <div style={{display:"flex",gap:10}}>
+                <button onClick={()=>setPendingImport(null)} style={{flex:1,padding:13,
+                  background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,fontFamily:"inherit",
+                  fontSize:15,cursor:"pointer",color:C.muted,WebkitTapHighlightColor:"transparent"}}>
+                  Cancel
+                </button>
+                <button onClick={confirmImport} style={{flex:1,padding:13,background:C.sage,
+                  color:"#fff",border:"none",borderRadius:12,fontFamily:"inherit",fontSize:15,
+                  fontWeight:600,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                  Confirm
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
