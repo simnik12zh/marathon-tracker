@@ -281,14 +281,42 @@ function NavArrow({onClick,dir}) {
 }
 
 // ─── Tip card ─────────────────────────────────────────────────────────────────
+// Running training zone, shown as a pill in TipCard (running sessions only).
+const ZONE = {
+  'easy recovery run':  { label: 'Z1 · Recovery',  color: '#5a8a58', bg: 'rgba(90,138,88,0.1)' },
+  'easy run':           { label: 'Z2 · Aerobic',   color: '#5a8a58', bg: 'rgba(90,138,88,0.1)' },
+  'long run':           { label: 'Z2 · Aerobic',   color: '#5a8a58', bg: 'rgba(90,138,88,0.1)' },
+  'easy jog':           { label: 'Z1 · Recovery',  color: '#5a8a58', bg: 'rgba(90,138,88,0.1)' },
+  'shake-out jog':      { label: 'Z1 · Recovery',  color: '#5a8a58', bg: 'rgba(90,138,88,0.1)' },
+  'tempo run':          { label: 'Z3 · Tempo',     color: '#9a7a3a', bg: 'rgba(196,168,130,0.15)' },
+  'track session':      { label: 'Z4 · Threshold', color: '#c05050', bg: 'rgba(192,80,80,0.08)' },
+  'sharpener':          { label: 'Z4 · Threshold', color: '#c05050', bg: 'rgba(192,80,80,0.08)' },
+};
+function getZone(workout) {
+  if (!workout) return null;
+  const w = workout.toLowerCase();
+  for (const [key, zone] of Object.entries(ZONE)) {
+    if (w.includes(key)) return zone;
+  }
+  return null;
+}
+
 function TipCard({workout}) {
   const tip = getTip(workout);
   if (!tip) return null;
+  const zone = getZone(workout);
   return (
     <div style={{
       marginTop:14,paddingTop:14,
       borderTop:`1px solid ${C.border}`,
     }}>
+      {zone && (
+        <span style={{
+          display:'inline-block',fontSize:11,fontWeight:700,
+          color:zone.color,background:zone.bg,
+          borderRadius:20,padding:'4px 11px',marginBottom:9,
+        }}>{zone.label}</span>
+      )}
       <p style={{
         margin:0,fontSize:13,color:C.muted,
         lineHeight:1.6,letterSpacing:"0.01em",
