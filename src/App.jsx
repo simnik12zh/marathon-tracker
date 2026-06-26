@@ -563,6 +563,8 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate,dayOff,setDayOff}) {
   const [editingKm,setEditingKm]=useState(false);
   const [kmInput,setKmInput]=useState("");
   const [sheetOpen,setSheetOpen]=useState(false);   // ⋯ edit-actions bottom sheet
+  const [direction,setDirection]=useState(null);    // 'left' | 'right' — day-slide direction
+  const [animating,setAnimating]=useState(false);   // day-change slide in progress
 
   // ── AI coach chat state ─────────────────────────────────────────────────────
   const [coachOpen,setCoachOpen]=useState(false);
@@ -580,7 +582,15 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate,dayOff,setDayOff}) {
   },[viewKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const persistCoach=(msgs)=>{ try { localStorage.setItem(coachKey,JSON.stringify(msgs)); } catch {} };
 
-  const navDay=(delta)=>{ setDayOff(o=>o+delta); setEditingKm(false); setSheetOpen(false); };
+  const navDay=(delta)=>{
+    setEditingKm(false); setSheetOpen(false);
+    // Left swipe / › (next day) → new content enters from the right (slideInLeft).
+    // Right swipe / ‹ (prev day) → enters from the left (slideInRight).
+    setDirection(delta>0?'left':'right');
+    setDayOff(o=>o+delta);
+    setAnimating(true);
+    setTimeout(()=>setAnimating(false),250);
+  };
   const swipe=useSwipe(()=>navDay(1),()=>navDay(-1));
   const completeRun=()=>updDay(viewKey,{completed:true,kmDone:e.km||0});
   const adjustKm=(delta)=>{
@@ -690,8 +700,8 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate,dayOff,setDayOff}) {
     textAlign:"left",WebkitTapHighlightColor:"transparent"};
 
   return (
-    <div {...swipe} style={{padding:"16px 16px 0"}}>
-      <style>{"@keyframes checkPop{0%{transform:scale(1)}50%{transform:scale(1.15)}100%{transform:scale(1)}}"}</style>
+    <div {...swipe} style={{padding:"16px 16px 80px"}}>
+      <style>{"@keyframes checkPop{0%{transform:scale(1)}50%{transform:scale(1.15)}100%{transform:scale(1)}}@keyframes slideInLeft{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes slideInRight{from{transform:translateX(-100%);opacity:0}to{transform:translateX(0);opacity:1}}"}</style>
       {/* Stats */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
         {[
@@ -729,6 +739,9 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate,dayOff,setDayOff}) {
         ))}
       </div>
 
+      {/* Day content — slides on day change; the stats above stay fixed. */}
+      <div style={{overflow:"hidden"}}>
+      <div key={dayOff} style={{animation:animating?`${direction==="left"?"slideInLeft":"slideInRight"} 220ms ease-out`:undefined}}>
       {/* Day navigation */}
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
         <NavArrow onClick={()=>navDay(-1)} dir="left"/>
@@ -764,29 +777,21 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate,dayOff,setDayOff}) {
           </div>
           {/* No circle on genuine rest days — nothing to log. */}
           {e.workout?.trim()&&(e.completed
-            ? <div style={{display:"flex",flexDirection:"column",alignItems:"center",
-                gap:5,flexShrink:0}}>
-                <button onClick={()=>updDay(viewKey,{completed:false,kmDone:null})}
-                  aria-label="Completed — tap to undo"
-                  style={{width:64,height:64,borderRadius:"50%",border:"none",
-                    background:C.done,cursor:"pointer",display:"flex",
-                    alignItems:"center",justifyContent:"center",
-                    animation:"checkPop .35s ease-out",
-                    WebkitTapHighlightColor:"transparent"}}><Chk size={22}/></button>
-                <span style={{fontSize:10,fontWeight:700,color:C.done,
-                  textTransform:"uppercase",letterSpacing:".05em"}}>Done</span>
-              </div>
-            : <div style={{display:"flex",flexDirection:"column",alignItems:"center",
-                gap:5,flexShrink:0}}>
-                <button onClick={hasKm?completeRun:()=>updDay(viewKey,{completed:true})}
-                  aria-label="Mark run as done"
-                  style={{width:64,height:64,borderRadius:"50%",
-                    border:`2.5px solid ${C.sage}`,background:C.sageLt,
-                    cursor:"pointer",
-                    WebkitTapHighlightColor:"transparent"}}/>
-                {hasKm&&<span style={{fontSize:10,fontWeight:700,color:C.sageDk,
-                  textTransform:"uppercase",letterSpacing:".05em"}}>Tap to log</span>}
-              </div>
+            ? <button onClick={()=>updDay(viewKey,{completed:false,kmDone:null})}
+                aria-label="Completed — tap to undo"
+                style={{width:64,height:64,borderRadius:"50%",border:"none",
+                  background:C.done,cursor:"pointer",display:"flex",flexShrink:0,
+                  alignItems:"center",justifyContent:"center",
+                  animation:"checkPop .35s ease-out",
+                  WebkitTapHighlightColor:"transparent"}}><Chk size={22}/></button>
+            : <button onClick={hasKm?completeRun:()=>updDay(viewKey,{completed:true})}
+                aria-label="Mark as done"
+                style={{width:64,height:64,borderRadius:"50%",
+                  border:`2.5px solid ${C.sage}`,background:C.sageLt,cursor:"pointer",
+                  display:"flex",flexShrink:0,alignItems:"center",justifyContent:"center",
+                  WebkitTapHighlightColor:"transparent"}}>
+                <span style={{fontSize:11,fontWeight:700,color:C.borderSt,letterSpacing:'.08em'}}>LOG</span>
+              </button>
           )}
           <button onClick={()=>setSheetOpen(true)} aria-label="More options"
             style={{width:44,height:44,borderRadius:"50%",border:"none",
@@ -895,115 +900,116 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate,dayOff,setDayOff}) {
             resize:"none",outline:"none",lineHeight:1.5,boxSizing:"border-box"}}/>
 
       </div>
+      </div>{/* /key wrapper */}
+      </div>{/* /overflow wrapper */}
 
-      {/* AI coach — standalone section below the card */}
-      {e.workout?.trim()&&(
-        <div style={{marginTop:16}}>
-            {!coachOpen
-              ? <button onClick={()=>setCoachOpen(true)} style={{width:"100%",padding:"12px",
-                  background:"transparent",color:C.sageDk,border:`1.5px solid ${C.sage}`,
-                  borderRadius:12,fontFamily:"inherit",fontSize:15,fontWeight:600,cursor:"pointer",
-                  display:"flex",alignItems:"center",justifyContent:"center",gap:8,
-                  WebkitTapHighlightColor:"transparent"}}>
-                  💬 Ask the coach
-                </button>
-              : <div style={{background:C.sageLt,borderRadius:14,padding:"14px 16px",
-                  borderLeft:`3px solid ${C.sage}`}}>
-                  <style>{"@keyframes coachBlink{0%,80%,100%{opacity:.25}40%{opacity:1}}"}</style>
-                  <div style={{display:"flex",alignItems:"center",marginBottom:10}}>
-                    <span style={{fontSize:11,fontWeight:700,color:C.sageDk,
-                      textTransform:"uppercase",letterSpacing:".07em"}}>🏃 Coach</span>
-                    {messages.length>0&&(
-                      <button onClick={newCoachChat}
-                        style={{marginLeft:12,background:"none",border:"none",cursor:"pointer",
-                          color:C.muted,fontSize:11,fontWeight:600,textDecoration:"underline",
-                          padding:0,WebkitTapHighlightColor:"transparent"}}>New conversation</button>
-                    )}
-                    <button onClick={()=>setCoachOpen(false)} aria-label="Close coach"
-                      style={{marginLeft:"auto",marginRight:-10,marginTop:-8,marginBottom:-8,
-                        background:"none",border:"none",cursor:"pointer",color:C.muted,
-                        fontSize:20,lineHeight:1,width:44,height:44,display:"flex",
-                        alignItems:"center",justifyContent:"center",flexShrink:0,
-                        WebkitTapHighlightColor:"transparent"}}>×</button>
-                  </div>
-
-                  {/* Messages */}
-                  {messages.length>0&&(
-                    <div style={{maxHeight:300,overflowY:"auto",display:"flex",
-                      flexDirection:"column",gap:8,marginBottom:10}}>
-                      {messages.map((m,i)=>(
-                        m.role==="assistant"
-                          ? <div key={i} style={{alignSelf:"flex-start",maxWidth:"92%",
-                              background:C.surface,borderLeft:`3px solid ${C.sage}`,
-                              borderRadius:"4px 12px 12px 4px",padding:"10px 12px"}}>
-                              {m.content
-                                ? <p style={{margin:0,fontSize:14,lineHeight:1.6,color:C.text,
-                                    whiteSpace:"pre-wrap"}}>{m.content}</p>
-                                : <div style={{display:"flex",gap:5,padding:"2px 0"}}>
-                                    {[0,1,2].map(j=>(
-                                      <span key={j} style={{width:7,height:7,borderRadius:"50%",
-                                        background:C.sage,display:"inline-block",
-                                        animation:`coachBlink 1.2s ${j*0.16}s infinite ease-in-out`}}/>
-                                    ))}
-                                  </div>}
-                            </div>
-                          : <div key={i} style={{alignSelf:"flex-end",maxWidth:"85%",
-                              background:C.surface,border:`1px solid ${C.border}`,
-                              borderRadius:"12px 12px 4px 12px",padding:"10px 12px"}}>
-                              <p style={{margin:0,fontSize:14,lineHeight:1.55,color:C.text,
-                                whiteSpace:"pre-wrap"}}>{m.content}</p>
-                            </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Conversation starter — one-tap, only before any chat / typing */}
-                  {messages.length===0&&!input.trim()&&(
-                    <button onClick={startCoach} disabled={sending}
-                      style={{width:"100%",padding:"13px 14px",background:C.surface,
-                        color:C.sageDk,border:`1px solid ${C.sage}`,borderRadius:12,
-                        fontFamily:"inherit",fontSize:14,fontWeight:600,
-                        cursor:sending?"default":"pointer",marginBottom:10,
-                        WebkitTapHighlightColor:"transparent"}}>
-                      Tell me about today's session
-                    </button>
-                  )}
-
-                  {coachError&&(
-                    <div style={{marginBottom:10}}>
-                      <p style={{margin:"0 0 8px",fontSize:13,color:C.muted,lineHeight:1.5}}>
-                        Couldn't reach the coach right now. Check your connection and try again.
-                      </p>
-                      {messages.length>0&&(
-                        <button onClick={retryCoach} style={{fontSize:13,fontWeight:600,
-                          color:C.sageDk,background:C.surface,border:`1px solid ${C.sage}`,
-                          borderRadius:10,padding:"8px 14px",cursor:"pointer",fontFamily:"inherit",
-                          WebkitTapHighlightColor:"transparent"}}>↻ Try again</button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Input row */}
-                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                    <input type="text" value={input}
-                      onChange={ev=>setInput(ev.target.value)}
-                      onKeyDown={ev=>{ if (ev.key==="Enter"){ ev.preventDefault(); sendCoach(); } }}
-                      placeholder="Ask the coach…" disabled={sending}
-                      style={{flex:1,border:`1px solid ${C.border}`,borderRadius:12,
-                        padding:"12px 14px",fontFamily:"inherit",fontSize:15,color:C.text,
-                        background:C.surface,outline:"none",boxSizing:"border-box",
-                        WebkitAppearance:"none"}}/>
-                    <button onClick={sendCoach} disabled={sending||!input.trim()}
-                      style={{padding:"14px 18px",background:input.trim()&&!sending?C.sage:C.border,
-                        color:"#fff",border:"none",borderRadius:12,fontFamily:"inherit",
-                        fontSize:14,fontWeight:600,
-                        cursor:input.trim()&&!sending?"pointer":"default",flexShrink:0,
-                        WebkitTapHighlightColor:"transparent"}}>Send</button>
-                  </div>
-                </div>
-            }
+      {/* AI coach — chat panel docked above the fixed bottom button, scrollable. */}
+      {e.workout?.trim()&&coachOpen&&(
+        <div style={{position:"fixed",left:16,right:16,zIndex:40,
+          bottom:"calc(env(safe-area-inset-bottom, 20px) + 16px + 60px)",
+          background:C.sageLt,borderRadius:14,padding:"14px 16px",
+          borderLeft:`3px solid ${C.sage}`,boxShadow:"0 8px 30px rgba(0,0,0,0.2)"}}>
+          <style>{"@keyframes coachBlink{0%,80%,100%{opacity:.25}40%{opacity:1}}"}</style>
+          <div style={{display:"flex",alignItems:"center",marginBottom:10}}>
+            <span style={{fontSize:11,fontWeight:700,color:C.sageDk,
+              textTransform:"uppercase",letterSpacing:".07em"}}>🏃 Coach</span>
+            {messages.length>0&&(
+              <button onClick={newCoachChat}
+                style={{marginLeft:12,background:"none",border:"none",cursor:"pointer",
+                  color:C.muted,fontSize:11,fontWeight:600,textDecoration:"underline",
+                  padding:0,WebkitTapHighlightColor:"transparent"}}>New conversation</button>
+            )}
           </div>
-        )}
+
+          {/* Messages */}
+          {messages.length>0&&(
+            <div style={{maxHeight:"40vh",overflowY:"auto",display:"flex",
+              flexDirection:"column",gap:8,marginBottom:10}}>
+              {messages.map((m,i)=>(
+                m.role==="assistant"
+                  ? <div key={i} style={{alignSelf:"flex-start",maxWidth:"92%",
+                      background:C.surface,borderLeft:`3px solid ${C.sage}`,
+                      borderRadius:"4px 12px 12px 4px",padding:"10px 12px"}}>
+                      {m.content
+                        ? <p style={{margin:0,fontSize:14,lineHeight:1.6,color:C.text,
+                            whiteSpace:"pre-wrap"}}>{m.content}</p>
+                        : <div style={{display:"flex",gap:5,padding:"2px 0"}}>
+                            {[0,1,2].map(j=>(
+                              <span key={j} style={{width:7,height:7,borderRadius:"50%",
+                                background:C.sage,display:"inline-block",
+                                animation:`coachBlink 1.2s ${j*0.16}s infinite ease-in-out`}}/>
+                            ))}
+                          </div>}
+                    </div>
+                  : <div key={i} style={{alignSelf:"flex-end",maxWidth:"85%",
+                      background:C.surface,border:`1px solid ${C.border}`,
+                      borderRadius:"12px 12px 4px 12px",padding:"10px 12px"}}>
+                      <p style={{margin:0,fontSize:14,lineHeight:1.55,color:C.text,
+                        whiteSpace:"pre-wrap"}}>{m.content}</p>
+                    </div>
+              ))}
+            </div>
+          )}
+
+          {/* Conversation starter — one-tap, only before any chat / typing */}
+          {messages.length===0&&!input.trim()&&(
+            <button onClick={startCoach} disabled={sending}
+              style={{width:"100%",padding:"13px 14px",background:C.surface,
+                color:C.sageDk,border:`1px solid ${C.sage}`,borderRadius:12,
+                fontFamily:"inherit",fontSize:14,fontWeight:600,
+                cursor:sending?"default":"pointer",marginBottom:10,
+                WebkitTapHighlightColor:"transparent"}}>
+              Tell me about today's session
+            </button>
+          )}
+
+          {coachError&&(
+            <div style={{marginBottom:10}}>
+              <p style={{margin:"0 0 8px",fontSize:13,color:C.muted,lineHeight:1.5}}>
+                Couldn't reach the coach right now. Check your connection and try again.
+              </p>
+              {messages.length>0&&(
+                <button onClick={retryCoach} style={{fontSize:13,fontWeight:600,
+                  color:C.sageDk,background:C.surface,border:`1px solid ${C.sage}`,
+                  borderRadius:10,padding:"8px 14px",cursor:"pointer",fontFamily:"inherit",
+                  WebkitTapHighlightColor:"transparent"}}>↻ Try again</button>
+              )}
+            </div>
+          )}
+
+          {/* Input row */}
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <input type="text" value={input}
+              onChange={ev=>setInput(ev.target.value)}
+              onKeyDown={ev=>{ if (ev.key==="Enter"){ ev.preventDefault(); sendCoach(); } }}
+              placeholder="Ask the coach…" disabled={sending}
+              style={{flex:1,border:`1px solid ${C.border}`,borderRadius:12,
+                padding:"12px 14px",fontFamily:"inherit",fontSize:15,color:C.text,
+                background:C.surface,outline:"none",boxSizing:"border-box",
+                WebkitAppearance:"none"}}/>
+            <button onClick={sendCoach} disabled={sending||!input.trim()}
+              style={{padding:"14px 18px",background:input.trim()&&!sending?C.sage:C.border,
+                color:"#fff",border:"none",borderRadius:12,fontFamily:"inherit",
+                fontSize:14,fontWeight:600,
+                cursor:input.trim()&&!sending?"pointer":"default",flexShrink:0,
+                WebkitTapHighlightColor:"transparent"}}>Send</button>
+          </div>
+        </div>
+      )}
+
+      {/* Coach toggle — always visible, fixed at the viewport bottom. */}
+      {e.workout?.trim()&&(
+        <button onClick={()=>setCoachOpen(o=>!o)}
+          style={{position:"fixed",left:16,right:16,zIndex:41,
+            bottom:"calc(env(safe-area-inset-bottom, 20px) + 16px)",
+            padding:"14px",borderRadius:12,fontFamily:"inherit",fontSize:15,fontWeight:600,
+            cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+            background:C.surface,color:C.sageDk,border:`1.5px solid ${C.sage}`,
+            boxShadow:"0 6px 20px rgba(0,0,0,0.18)",
+            WebkitTapHighlightColor:"transparent"}}>
+          {coachOpen?"✕ Close coach":"💬 Ask the coach"}
+        </button>
+      )}
 
       {/* ⋯ Edit-actions bottom sheet */}
       {sheetOpen&&(
