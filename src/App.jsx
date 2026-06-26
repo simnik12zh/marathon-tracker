@@ -590,6 +590,14 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
     if (!isNaN(v)) updDay(viewKey,{kmDone:v});
     setEditingKm(false);
   };
+  // Unlogged running sessions: stepper adjusts the planned distance (e.km).
+  const adjustPlannedKm=(delta)=>updDay(viewKey,{km:Math.max(0,parseFloat(((e.km||0)+delta).toFixed(1)))});
+  const openPlannedKmEdit=()=>{ setKmInput(fmtKm(e.km||0)); setEditingKm(true); };
+  const confirmPlannedKmEdit=()=>{
+    const v=parseFloat(kmInput);
+    if (!isNaN(v)) updDay(viewKey,{km:v});
+    setEditingKm(false);
+  };
 
   const d=new Date(viewKey+"T00:00:00");
   const dayName=d.toLocaleDateString("en-US",{weekday:"long"});
@@ -782,10 +790,42 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
                       alignItems:"center",justifyContent:"center",flexShrink:0,
                       WebkitTapHighlightColor:"transparent"}}>+</button>
                   </div>
-              : <div style={{display:"flex",alignItems:"baseline",gap:10}}>
-                  <KmBig value={target} color={C.sage}/>
-                  <span style={{fontSize:20,color:C.sage,fontWeight:500}}>km</span>
-                </div>
+              : editingKm
+                ? <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <input type="text" inputMode="decimal"
+                      value={kmInput} onChange={ev=>setKmInput(ev.target.value)}
+                      autoFocus
+                      style={{width:90,border:`1.5px solid ${C.borderSt}`,borderRadius:12,
+                        padding:"10px 12px",fontFamily:"monospace",fontSize:22,fontWeight:700,
+                        color:C.text,background:C.surface,outline:"none",
+                        boxSizing:"border-box",textAlign:"center",WebkitAppearance:"none"}}/>
+                    <span style={{fontSize:17,color:C.muted}}>km</span>
+                    <button onClick={confirmPlannedKmEdit} style={{padding:"10px 16px",
+                      background:C.sage,color:"#fff",border:"none",borderRadius:10,
+                      fontFamily:"inherit",fontSize:14,fontWeight:600,cursor:"pointer",
+                      WebkitTapHighlightColor:"transparent"}}>✓</button>
+                    <button onClick={()=>setEditingKm(false)} style={{padding:"10px 12px",
+                      background:"none",border:`1px solid ${C.border}`,borderRadius:10,
+                      fontFamily:"inherit",fontSize:13,cursor:"pointer",color:C.muted,
+                      WebkitTapHighlightColor:"transparent"}}>✕</button>
+                  </div>
+                : <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <button onClick={()=>adjustPlannedKm(-0.5)} style={{width:44,height:44,
+                      borderRadius:"50%",background:C.bg,border:`1px solid ${C.border}`,
+                      fontSize:24,cursor:"pointer",color:C.text,display:"flex",
+                      alignItems:"center",justifyContent:"center",flexShrink:0,
+                      WebkitTapHighlightColor:"transparent"}}>−</button>
+                    <div onClick={openPlannedKmEdit} style={{flex:1,textAlign:"center",cursor:"pointer"}}>
+                      <KmBig value={target} color={C.sage}/>
+                      <span style={{fontSize:20,color:C.sage,fontWeight:500}}> km</span>
+                      <div style={{fontSize:11,color:C.subtle,marginTop:3}}>tap to type exact</div>
+                    </div>
+                    <button onClick={()=>adjustPlannedKm(0.5)} style={{width:44,height:44,
+                      borderRadius:"50%",background:C.bg,border:`1px solid ${C.border}`,
+                      fontSize:24,cursor:"pointer",color:C.text,display:"flex",
+                      alignItems:"center",justifyContent:"center",flexShrink:0,
+                      WebkitTapHighlightColor:"transparent"}}>+</button>
+                  </div>
             }
           </div>
         )}
