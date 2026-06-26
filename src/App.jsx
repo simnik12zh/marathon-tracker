@@ -1088,18 +1088,9 @@ function JourneyView({plan,today,raceDate,onGoToWeek}) {
     const planned=entries.reduce((s,e)=>s+plannedKm(e),0);
     const done=entries.reduce((s,e)=>s+actualKm(e),0);
     const longRun=entries.reduce((mx,e)=>Math.max(mx,plannedKm(e)),0);
-    return {entries,planned,done,longRun};
+    return {planned,done,longRun};
   };
 
-  const callout=(emoji,text,accent)=>(
-    <div style={{display:"flex",alignItems:"center",gap:10,margin:"6px 0 6px 17px",
-      borderRadius:14,padding:"12px 14px",
-      background:accent==="warm"?"rgba(196,168,130,0.2)":accent==="muted"?"rgba(122,138,154,0.12)":C.sageLt}}>
-      <span style={{fontSize:20,flexShrink:0}}>{emoji}</span>
-      <span style={{fontSize:13,fontWeight:600,
-        color:accent==="warm"?"#8a6a37":accent==="muted"?"#5f6b75":C.sageDk}}>{text}</span>
-    </div>
-  );
 
   return (
     <div style={{padding:"16px 16px 32px"}}>
@@ -1140,7 +1131,7 @@ function JourneyView({plan,today,raceDate,onGoToWeek}) {
             </div>
 
             {phase.weeks.map(N=>{
-              const {entries,planned,done,longRun}=weekStats(N);
+              const {planned,done,longRun}=weekStats(N);
               const days=weekDays(N);
               const mon=days[0];
               const isCurrent=N===curWeek;
@@ -1163,31 +1154,19 @@ function JourneyView({plan,today,raceDate,onGoToWeek}) {
                       {longRun>0&&(
                         <div style={{flexShrink:0,textAlign:"right"}}>
                           <span style={{fontFamily:"monospace",fontSize:16,fontWeight:700,color:C.sage}}>{fmtKm(longRun)}</span>
-                          <span style={{fontSize:11,color:C.muted}}> km long</span>
+                          <span style={{fontSize:11,color:C.muted}}>{N===17?" km · Race Day":" km longest run"}</span>
                         </div>
                       )}
                     </div>
                     <div style={{height:6,background:"rgba(196,168,130,0.3)",borderRadius:3,marginTop:8,overflow:"hidden"}}>
                       <div style={{height:"100%",width:`${Math.round(pct*100)}%`,background:C.done}}/>
                     </div>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
-                      <span style={{fontSize:12,color:C.muted,fontFamily:"monospace"}}>
-                        {started
-                          ? <><span style={{color:done>0?C.done:C.muted}}>{fmtKm(done)}</span> / {fmtKm(planned)} km</>
-                          : `${fmtKm(planned)} km planned`}
-                      </span>
-                      <div style={{display:"flex",gap:4}}>
-                        {entries.map((e,i)=>{
-                          const c=e.completed?C.done:(e.km||0)>0?C.warm:e.workout?.trim()?C.sage:null;
-                          return <span key={i} style={{width:7,height:7,borderRadius:"50%",
-                            background:c||"transparent",border:c?"none":`1px solid ${C.border}`}}/>;
-                        })}
-                      </div>
+                    <div style={{fontSize:12,color:C.muted,fontFamily:"monospace",marginTop:8}}>
+                      {started
+                        ? <><span style={{color:done>0?C.done:C.muted}}>{fmtKm(done)}</span> / {fmtKm(planned)} km</>
+                        : `${fmtKm(planned)} km planned`}
                     </div>
                   </div>
-                  {N===11&&callout("🏔","Peak week — your hardest week. 32km long run.")}
-                  {isDeload&&callout("↓","Recovery week — planned reduction in load","muted")}
-                  {N===17&&callout("🏆","Marathon Day","warm")}
                 </div>
               );
             })}
