@@ -22,6 +22,16 @@ function daysUntil(ds) {
   const t=new Date(ds+"T00:00:00"), n=new Date(); n.setHours(0,0,0,0);
   return Math.ceil((t-n)/86400000);
 }
+// Map days-to-race onto the plan's macro phases (Base → Build → Peak → Taper → Race)
+function phaseFor(days) {
+  if (days==null) return null;
+  if (days>84) return "Base";
+  if (days>42) return "Build";
+  if (days>21) return "Peak";
+  if (days>7)  return "Taper";
+  if (days>=0) return "Race week";
+  return "Post-race";
+}
 function weekOf(off=0) {
   const n=new Date(), dow=n.getDay(), mon=new Date(n);
   mon.setDate(n.getDate()-(dow===0?6:dow-1)+off*7);
@@ -402,15 +412,16 @@ function EditDayScreen({dateKey:dk,entry,onSave,onBack}) {
 }
 
 // ─── Today view ───────────────────────────────────────────────────────────────
-function TodayView({plan,updDay,onEdit}) {
+function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
   const [dayOff,setDayOff]=useState(0);
   const viewKey=offsetDate(dayOff);
   const e=plan[viewKey]||{};
   const isToday=dayOff===0;
   const [editingKm,setEditingKm]=useState(false);
   const [kmInput,setKmInput]=useState("");
+  const [coach,setCoach]=useState({status:"idle",text:""});
 
-  const navDay=(delta)=>{ setDayOff(o=>o+delta); setEditingKm(false); };
+  const navDay=(delta)=>{ setDayOff(o=>o+delta); setEditingKm(false); setCoach({status:"idle",text:""}); };
   const completeRun=()=>updDay(viewKey,{completed:true,kmDone:e.km||0});
   const adjustKm=(delta)=>{
     const next=Math.max(0,parseFloat((ran+delta).toFixed(1)));
@@ -437,6 +448,49 @@ function TodayView({plan,updDay,onEdit}) {
   const mDays=monthGrid(now.getFullYear(),now.getMonth()).filter(Boolean);
   const mTarget=mDays.reduce((s,dk)=>s+plannedKm(plan[dk]),0);
   const mDone=mDays.reduce((s,dk)=>s+actualKm(plan[dk]),0);
+
+  // ── AI coach ──────────────────────────────────────────────────────────────
+  const feelingLabel=(v)=>FEELINGS.find(f=>f.value===v)?.label||null;
+  const buildCoachContext=()=>{
+    const recent=[];
+    for (let i=1;i<=7&&recent.length<5;i++) {
+      const dk=offsetDate(dayOff-i), re=plan[dk];
+      if (re?.completed&&re.workout?.trim()) {
+        recent.push({date:dk,workout:re.workout.trim(),km:actualKm(re),feeling:feelingLabel(re.feeling)});
+      }
+    }
+    const dleft=daysUntil(raceDate);
+    return {
+      raceName,raceDate,daysUntilRace:dleft,phase:phaseFor(dleft),
+      day:{date:viewKey,label:`${dayName}, ${dayFull}`,workout:e.workout,
+        plannedKm:target,actualKm:ran,completed:!!e.completed,feeling:feelingLabel(e.feeling)},
+      recent,
+      week:{doneKm:wkDone,plannedKm:wkTarget},
+      month:{doneKm:mDone,plannedKm:mTarget},
+    };
+  };
+  const askCoach=async()=>{
+    setCoach({status:"loading",text:""});
+    try {
+      const resp=await fetch("/api/coach",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(buildCoachContext()),
+      });
+      if (!resp.ok||!resp.body) throw new Error("bad response");
+      const reader=resp.body.getReader(), decoder=new TextDecoder();
+      let acc="";
+      setCoach({status:"streaming",text:""});
+      for (;;) {
+        const {done,value}=await reader.read();
+        if (done) break;
+        acc+=decoder.decode(value,{stream:true});
+        setCoach({status:"streaming",text:acc});
+      }
+      setCoach({status:acc.trim()?"done":"error",text:acc});
+    } catch {
+      setCoach({status:"error",text:""});
+    }
+  };
 
   return (
     <div style={{padding:"16px 16px 0"}}>
@@ -643,6 +697,58 @@ function TodayView({plan,updDay,onEdit}) {
             ✏ Add / change run
           </button>
         </div>
+
+        {/* AI coach */}
+        {e.workout?.trim()&&(
+          <div style={{marginTop:14,paddingTop:14,
+            borderTop:`1px solid ${e.completed?"rgba(114,173,106,.2)":C.border}`}}>
+            {coach.status==="idle"
+              ? <button onClick={askCoach} style={{width:"100%",padding:"13px",
+                  background:C.sage,color:"#fff",border:"none",borderRadius:12,
+                  fontFamily:"inherit",fontSize:15,fontWeight:600,cursor:"pointer",
+                  display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+                  WebkitTapHighlightColor:"transparent"}}>
+                  💬 Ask the coach
+                </button>
+              : <div style={{background:C.sageLt,borderRadius:14,padding:"14px 16px",
+                  borderLeft:`3px solid ${C.sage}`}}>
+                  <style>{"@keyframes coachBlink{0%,80%,100%{opacity:.25}40%{opacity:1}}"}</style>
+                  <div style={{display:"flex",alignItems:"center",marginBottom:8}}>
+                    <span style={{fontSize:11,fontWeight:700,color:C.sageDk,
+                      textTransform:"uppercase",letterSpacing:".07em"}}>🏃 Coach</span>
+                    <button onClick={()=>setCoach({status:"idle",text:""})}
+                      style={{marginLeft:"auto",background:"none",border:"none",
+                        cursor:"pointer",color:C.muted,fontSize:18,lineHeight:1,padding:2,
+                        WebkitTapHighlightColor:"transparent"}}>×</button>
+                  </div>
+                  {coach.status==="loading"&&(
+                    <div style={{display:"flex",gap:5,padding:"4px 0"}}>
+                      {[0,1,2].map(i=>(
+                        <span key={i} style={{width:7,height:7,borderRadius:"50%",
+                          background:C.sage,display:"inline-block",
+                          animation:`coachBlink 1.2s ${i*0.16}s infinite ease-in-out`}}/>
+                      ))}
+                    </div>
+                  )}
+                  {coach.text&&(
+                    <p style={{margin:0,fontSize:14,lineHeight:1.6,color:C.text,
+                      whiteSpace:"pre-wrap"}}>{coach.text}</p>
+                  )}
+                  {coach.status==="error"&&(
+                    <div>
+                      <p style={{margin:"0 0 10px",fontSize:13,color:C.muted,lineHeight:1.5}}>
+                        Couldn't reach the coach right now. Check your connection and try again.
+                      </p>
+                      <button onClick={askCoach} style={{fontSize:13,fontWeight:600,
+                        color:C.sageDk,background:C.surface,border:`1px solid ${C.sage}`,
+                        borderRadius:10,padding:"8px 14px",cursor:"pointer",fontFamily:"inherit",
+                        WebkitTapHighlightColor:"transparent"}}>↻ Try again</button>
+                    </div>
+                  )}
+                </div>
+            }
+          </div>
+        )}
       </div>
     </div>
   );
@@ -997,7 +1103,7 @@ export default function App() {
       </div>
 
       <div style={{paddingBottom:32}}>
-        {view==="today"&&<TodayView plan={plan} updDay={updDay} onEdit={openEdit}/>}
+        {view==="today"&&<TodayView plan={plan} updDay={updDay} onEdit={openEdit} raceName={name} raceDate={raceDate}/>}
         {view==="week"&&<WeekView today={today} plan={plan} wkOff={wkOff} setWkOff={setWkOff} onEdit={openEdit}/>}
         {view==="month"&&<MonthView today={today} plan={plan} moOff={moOff} setMoOff={setMoOff} onEdit={openEdit}/>}
       </div>

@@ -97,30 +97,52 @@ Screen-based (`screen` state): `"main"` | `"setup"` | `"editday"`. No router. Al
 
 ---
 
-## Planned next feature: AI coach
+## AI coach ✅ built
 
-The big next thing is an in-app AI coach. When the athlete taps "Ask the coach", Claude explains today's session in context — accounting for where they are in the plan, how they've been feeling (from the feeling ratings), and what's coming up.
+When the athlete taps "Ask the coach 💬" on the Today workout card, Claude explains
+that day's session in context — where they are in the plan, how they've been feeling
+(from the feeling ratings), and the week/month load. The response streams into a chat
+bubble below the button.
 
-**Suggested implementation:**
-- Add an "Ask the coach 💬" button to the Today workout card
-- POST to the Anthropic API (`/v1/messages`) with a prompt that includes:
-  - Current date and days until race
-  - Today's planned workout and km
-  - The phase (base / build / peak / taper)
-  - Last 3–5 days of completed sessions + feelings from `plan`
-  - Week and month km totals (done vs planned)
-- Stream the response into a chat bubble below the button
-- Model: `claude-sonnet-4-6` — fast enough for mobile, quality is good
-- API key: store in `.env` as `VITE_ANTHROPIC_API_KEY` and access via `import.meta.env.VITE_ANTHROPIC_API_KEY`
-
-**Important:** The Anthropic API does not allow direct browser calls from a public URL (CORS + key exposure). You'll need a thin proxy — a Vercel Edge Function works well:
+### How it works
 
 ```
-/api/coach.js  →  Vercel Edge Function
-                   receives { prompt } from client
-                   calls Anthropic API with key from env
-                   streams response back to client
+src/App.jsx          "Ask the coach" button + streaming chat bubble (TodayView)
+   │  POST /api/coach  { raceName, daysUntilRace, phase, day, recent, week, month }
+   ▼
+api/coach.js         Vercel Node.js serverless function (NOT an Edge Function)
+                       - reads ANTHROPIC_API_KEY from server env (never sent to the browser)
+                       - builds the coaching prompt from the context
+                       - calls Claude with @anthropic-ai/sdk and streams text back
 ```
+
+- **Model:** `claude-sonnet-4-6` — fast enough for a mobile chat bubble, strong quality.
+  Set in `MODEL` at the top of `api/coach.js`; bump to `claude-opus-4-8` for max quality.
+- **Context sent:** days until race, training phase (Base → Build → Peak → Taper → Race
+  week, derived from days-to-race), the viewed day's workout/km/feeling, the last up-to-5
+  completed sessions with feelings, and week/month km totals (done vs planned).
+- **Streaming:** the function streams `text/plain` chunks; the client reads the body with
+  a `ReadableStream` reader and appends each chunk into the bubble live.
+
+### Why a server-side proxy (and not `VITE_ANTHROPIC_API_KEY`)
+
+The Anthropic API can't be called directly from the browser — CORS blocks it, and any
+`VITE_`-prefixed env var is **bundled into the public client JS**, exposing the key. So the
+key lives only in `ANTHROPIC_API_KEY` (no `VITE_` prefix) and is read only inside
+`api/coach.js`, which runs server-side on Vercel.
+
+### Running the coach locally
+
+`npm run dev` serves the UI but **cannot run `/api/coach`** (Vite doesn't execute the
+serverless function). To exercise the coach end-to-end locally:
+
+```bash
+cp .env.example .env        # then paste your key into ANTHROPIC_API_KEY
+npx vercel dev              # serves the UI AND the /api function
+```
+
+In production, set `ANTHROPIC_API_KEY` in the Vercel project's Environment Variables.
+`.env` is git-ignored so the key is never committed.
 
 ---
 
