@@ -525,20 +525,32 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
 
   // ── AI coach ──────────────────────────────────────────────────────────────
   const feelingLabel=(v)=>FEELINGS.find(f=>f.value===v)?.label||null;
+  const feelingEmoji=(v)=>FEELINGS.find(f=>f.value===v)?.emoji||null;
   const buildCoachContext=()=>{
-    const recent=[];
-    for (let i=1;i<=7&&recent.length<5;i++) {
-      const dk=offsetDate(dayOff-i), re=plan[dk];
-      if (re?.completed&&re.workout?.trim()) {
-        recent.push({date:dk,workout:re.workout.trim(),km:actualKm(re),feeling:feelingLabel(re.feeling)});
+    const today=todayStr();
+    // Give the coach the same view the athlete has: the full plan in both
+    // directions. The server (buildContextBlock) decides how much detail to
+    // render so the prompt stays within sensible token limits.
+    const dates=Object.keys(plan).filter(dk=>plan[dk]?.workout?.trim()).sort();
+    const history=[];   // every completed session, oldest first
+    const upcoming=[];  // every remaining planned session through race day
+    for (const dk of dates) {
+      const re=plan[dk];
+      if (re.completed) {
+        history.push({date:dk,workout:re.workout.trim(),plannedKm:plannedKm(re),
+          kmDone:actualKm(re),feeling:feelingLabel(re.feeling),emoji:feelingEmoji(re.feeling),
+          notes:re.notes?.trim()||null});
+      } else if (dk>today&&(!raceDate||dk<=raceDate)) {
+        upcoming.push({date:dk,workout:re.workout.trim(),km:plannedKm(re)});
       }
     }
     const dleft=daysUntil(raceDate);
     return {
-      raceName,raceDate,daysUntilRace:dleft,phase:phaseFor(dleft),
+      raceName,raceDate,today,daysUntilRace:dleft,phase:phaseFor(dleft),
       day:{date:viewKey,label:`${dayName}, ${dayFull}`,workout:e.workout,
         plannedKm:target,actualKm:ran,completed:!!e.completed,feeling:feelingLabel(e.feeling)},
-      recent,
+      history,
+      upcoming,
       week:{doneKm:wkDone,plannedKm:wkTarget},
       month:{doneKm:mDone,plannedKm:mTarget},
     };

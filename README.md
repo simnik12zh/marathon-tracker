@@ -99,28 +99,47 @@ Screen-based (`screen` state): `"main"` | `"setup"` | `"editday"`. No router. Al
 
 ## AI coach ✅ built
 
-When the athlete taps "Ask the coach 💬" on the Today workout card, Claude explains
-that day's session in context — where they are in the plan, how they've been feeling
-(from the feeling ratings), and the week/month load. The response streams into a chat
-bubble below the button.
+Tapping "Ask the coach 💬" on the Today workout card opens a **persistent chat** with
+Claude acting as the athlete's coach. The empty state offers a one-tap starter ("Tell me
+about today's session"); after that the athlete can keep asking follow-up questions in a
+text field, and the full back-and-forth renders in the bubble (assistant left, athlete
+right). Each reply streams in live. The conversation is saved to `localStorage` per day
+(`coach-YYYY-MM-DD`), so it survives closing the app and navigating between days; a "New
+conversation" link clears that day's history.
+
+Because the coach is sent the **full plan — all completed sessions and all remaining ones
+through race day** — it can talk about any session (past or upcoming), explain how the
+plan builds, and ground its advice in how the athlete has actually been training.
 
 ### How it works
 
 ```
-src/App.jsx          "Ask the coach" button + streaming chat bubble (TodayView)
-   │  POST /api/coach  { raceName, daysUntilRace, phase, day, recent, week, month }
+src/App.jsx          "Ask the coach" button + persistent streaming chat (TodayView)
+   │  POST /api/coach  { raceName, raceDate, today, daysUntilRace, phase,
+   │                     day, history, upcoming, week, month, messages }
    ▼
 api/coach.js         Vercel Node.js serverless function (NOT an Edge Function)
                        - reads ANTHROPIC_API_KEY from server env (never sent to the browser)
-                       - builds the coaching prompt from the context
-                       - calls Claude with @anthropic-ai/sdk and streams text back
+                       - builds the plan context into the SYSTEM prompt (buildContextBlock)
+                       - sends the full `messages` array to Claude (@anthropic-ai/sdk)
+                       - streams the reply back as text
 ```
 
 - **Model:** `claude-sonnet-4-6` — fast enough for a mobile chat bubble, strong quality.
   Set in `MODEL` at the top of `api/coach.js`; bump to `claude-opus-4-8` for max quality.
-- **Context sent:** days until race, training phase (Base → Build → Peak → Taper → Race
-  week, derived from days-to-race), the viewed day's workout/km/feeling, the last up-to-5
-  completed sessions with feelings, and week/month km totals (done vs planned).
+- **Context sent:** the **full plan in both directions** — every completed session
+  (`history`: date, workout, planned/done km, feeling, notes) and every remaining planned
+  session through race day (`upcoming`: date, workout, km) — plus the viewed day's details,
+  week/month km totals (done vs planned), days until race, and training phase (Base → Build
+  → Peak → Taper → Race week, derived from days-to-race). It's assembled client-side in
+  `buildCoachContext` (`src/App.jsx`) and rendered into the **system prompt** by
+  `buildContextBlock` (`api/coach.js`), so it stays available however long the chat grows.
+- **Token budget:** to keep the prompt bounded late in the 17-week block, completed
+  sessions older than `FULL_DETAIL_DAYS` (14) are summarised to one line (`date: km emoji`)
+  while the last 2 weeks keep full detail.
+- **Conversation:** `messages` carries the whole `{role, content}` history each request, so
+  the coach has the full thread; the empty-chat starter sends a single "Tell me about
+  today's session" user turn.
 - **Streaming:** the function streams `text/plain` chunks; the client reads the body with
   a `ReadableStream` reader and appends each chunk into the bubble live.
 

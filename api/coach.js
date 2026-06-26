@@ -22,11 +22,24 @@ function fmtKm(n) {
   return n % 1 === 0 ? `${n}` : `${n.toFixed(1)}`;
 }
 
-// Render the athlete's current situation as a context block that is appended to
-// the system prompt — so the coach always has it, however long the chat grows.
+// Return the YYYY-MM-DD string `n` days before the given YYYY-MM-DD date.
+function daysBeforeStr(dateStr, n) {
+  const d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() - n);
+  const pad = (x) => String(x).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// Sessions completed within this many days of "now" get full detail; anything
+// older is summarised to one line so the prompt stays bounded late in the plan.
+const FULL_DETAIL_DAYS = 14;
+
+// Render the athlete's full plan — history behind and road ahead — as a context
+// block appended to the system prompt, so the coach always has the same view of
+// the plan the athlete does, however long the chat grows.
 function buildContextBlock(ctx) {
   const lines = [];
-  lines.push("Here is the runner's current situation. Ground your advice in it; don't invent numbers you weren't given.");
+  lines.push("Here is the runner's full training plan — everything completed so far and everything still to come. This is the same view of the plan the runner has in the app. Ground your advice in it; don't invent numbers you weren't given.");
   lines.push("");
   lines.push(`Race: ${ctx.raceName || "the marathon"} on ${ctx.raceDate || "race day"}.`);
   if (ctx.daysUntilRace != null) {
@@ -47,12 +60,42 @@ function buildContextBlock(ctx) {
     lines.push(`- Status: not done yet`);
   }
 
-  if (Array.isArray(ctx.recent) && ctx.recent.length) {
+  // Completed history (oldest first). Recent sessions in full; older ones get a
+  // concise date + km + feeling-emoji line to keep the token count in check.
+  const history = Array.isArray(ctx.history) ? ctx.history : [];
+  if (history.length) {
+    const ref = ctx.today || d.date || null;
+    const cutoff = ref ? daysBeforeStr(ref, FULL_DETAIL_DAYS) : null;
+    const older = cutoff ? history.filter((h) => h.date < cutoff) : [];
+    const recent = cutoff ? history.filter((h) => h.date >= cutoff) : history;
+
     lines.push("");
-    lines.push("Recent completed sessions (most recent first):");
-    for (const r of ctx.recent) {
-      const feeling = r.feeling ? `, felt "${r.feeling}"` : "";
-      lines.push(`- ${r.date}: ${r.workout} — ${fmtKm(r.km)} km${feeling}`);
+    lines.push(`Completed training history — ${history.length} session${history.length === 1 ? "" : "s"} so far, oldest first:`);
+    if (older.length) {
+      lines.push("Earlier sessions (summarised):");
+      for (const h of older) {
+        const emoji = h.emoji ? ` ${h.emoji}` : "";
+        lines.push(`- ${h.date}: ${fmtKm(h.kmDone)} km${emoji}`);
+      }
+      lines.push("Last 2 weeks (full detail):");
+    }
+    for (const h of recent) {
+      const parts = [`- ${h.date}: ${h.workout} — ${fmtKm(h.kmDone)} km`];
+      if (h.plannedKm && h.plannedKm !== h.kmDone) parts.push(`(planned ${fmtKm(h.plannedKm)})`);
+      if (h.feeling) parts.push(`· felt "${h.feeling}"`);
+      if (h.notes) parts.push(`· note: ${h.notes}`);
+      lines.push(parts.join(" "));
+    }
+  }
+
+  // The full road ahead: every remaining planned session through race day.
+  const upcoming = Array.isArray(ctx.upcoming) ? ctx.upcoming : [];
+  if (upcoming.length) {
+    lines.push("");
+    lines.push(`Remaining planned sessions through race day — ${upcoming.length} to go:`);
+    for (const u of upcoming) {
+      const km = u.km ? ` — ${fmtKm(u.km)} km` : "";
+      lines.push(`- ${u.date}: ${u.workout}${km}`);
     }
   }
 
