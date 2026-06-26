@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-const SK = "marathon-v7";
+const SK = "marathon-v8";
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DL = ["M","T","W","T","F","S","S"];
 const DN = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
@@ -177,7 +177,7 @@ function getTip(workout) {
   if (w.includes("strength") || w.includes("kraft")) return TIPS.strength;
   if (w.includes("walking") || w.includes("hiking")) return TIPS.walking;
   if (w.includes("cycling") || w.includes("cycle")) return TIPS.cycling;
-  if (w.includes("hiit") || w.includes("boxing")) return TIPS.hiit;
+  if (w.includes("hiit")) return TIPS.hiit;
   if (w.includes("⋯") || w.includes("other")) return TIPS.other;
   if (w.includes("sick") || w.includes("injur")) return TIPS.sick;
   return null;
@@ -207,7 +207,7 @@ const PLAN_WEEKS = [
   // Week 1 (Jun 29) — Phase 1: Base
   [['Pilates',null],['Easy run',8],['Strength',null],['Easy run',8],['Yoga',null],['Long run',16],['Easy recovery run',6]],
   // Week 2 (Jul 6) — Phase 1: Base
-  [['Pilates',null],['Easy run',8],['HIIT Boxing',null],['Easy run',10],['Strength',null],['Long run',18],['Easy recovery run',6]],
+  [['Pilates',null],['Easy run',8],['Yoga',null],['Easy run',10],['Strength',null],['Long run',18],['Easy recovery run',6]],
   // Week 3 (Jul 13) — Phase 1: Base
   [['Pilates',null],['Easy run',10],['Strength',null],['Easy run',10],['Yoga',null],['Long run',20],['Easy recovery run',8]],
   // Week 4 (Jul 20) — Deload
@@ -215,7 +215,7 @@ const PLAN_WEEKS = [
   // Week 5 (Jul 27) — Phase 2: Build
   [['Pilates',null],['Easy run',10],['Tempo run',10],['Strength',null],['Easy run',8],['Long run',22],['Easy recovery run',8]],
   // Week 6 (Aug 3) — Phase 2: Build
-  [['Pilates',null],['Easy run',10],['HIIT Boxing',null],['Tempo run',12],['Yoga',null],['Long run',24],['Easy recovery run',8]],
+  [['Pilates',null],['Easy run',10],null,['Tempo run',12],['Yoga',null],['Long run',24],['Easy recovery run',8]],
   // Week 7 (Aug 10) — Phase 2: Build
   [['Pilates',null],['Easy run',10],['Track session – 6×800m',11],['Strength',null],['Easy run',8],['Long run',26],['Easy recovery run',8]],
   // Week 8 (Aug 17) — Deload
