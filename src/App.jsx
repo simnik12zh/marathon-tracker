@@ -644,20 +644,20 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
               : e.workout?.trim()
                 ? (ALTS.find(a=>e.workout.includes(a.label))?.emoji ?? '⚡')
                 : 'Rest',
-            lbl: e.workout?.trim()&&!e.completed ? "planned" : (isToday?"Today":d.toLocaleDateString("en-US",{weekday:"short"})),
+            lbl: "Today",
           },
           {
             // Green only counts km actually run; the planned total stays neutral.
             node: wkTarget>0
               ? <><span style={{color:wkDone>0?C.done:C.text}}>{fmtKm(wkDone)}</span>/{fmtKm(wkTarget)}</>
               : "—",
-            lbl: "km / week",
+            lbl: "This week",
           },
           {
             node: mTarget>0
               ? <><span style={{color:mDone>0?C.done:C.text}}>{fmtKm(mDone)}</span>/{fmtKm(mTarget)}</>
               : "—",
-            lbl: "km / month",
+            lbl: new Date().toLocaleDateString('en-US',{month:'long'}).toUpperCase(),
           },
         ].map(({node,lbl},i)=>(
           <div key={i} style={{background:C.surface,border:`1px solid ${C.border}`,
