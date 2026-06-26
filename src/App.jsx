@@ -349,6 +349,7 @@ function SetupScreen({initName,initAthlete,isEdit,onBack,onSave}) {
   const fileRef=useRef(null);
   const [pendingImport,setPendingImport]=useState(null);   // parsed backup awaiting confirmation
   const [importError,setImportError]=useState("");
+  const [howToOpen,setHowToOpen]=useState(false);   // "How to save your backup" tip expanded
   const exportData=()=>{
     const coach={};
     Object.keys(localStorage).filter(k=>k.startsWith('coach-')).forEach(k=>{ coach[k]=localStorage.getItem(k); });
@@ -456,8 +457,25 @@ function SetupScreen({initName,initAthlete,isEdit,onBack,onSave}) {
             fontWeight:600,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
             📥 Export my data
           </button>
-          <div style={{fontSize:12,color:C.muted,textAlign:"center",lineHeight:1.5,margin:"12px 6px"}}>
-            Your data is stored on this device only. Export regularly to keep a backup.
+          <div style={{display:"flex",flexDirection:"column",gap:5,margin:"16px 4px 20px"}}>
+            <div style={{fontSize:12,color:C.muted,lineHeight:1.5}}>Your data is stored on this device only.</div>
+            <div style={{fontSize:12,color:C.muted,lineHeight:1.5}}>After exporting, tap “More…” → “Save to Files” → iCloud Drive to keep a safe backup.</div>
+            <div style={{fontSize:12,color:C.muted,lineHeight:1.5}}>Restore anytime from the same file.</div>
+            <button onClick={()=>setHowToOpen(o=>!o)} style={{alignSelf:"flex-start",marginTop:4,
+              background:"none",border:"none",cursor:"pointer",color:C.muted,fontSize:12,
+              fontWeight:500,padding:"2px 0",WebkitTapHighlightColor:"transparent"}}>
+              ⓘ How to save your backup
+            </button>
+            {howToOpen&&(
+              <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:4,padding:"12px 14px",
+                background:C.bg,border:`1px solid ${C.border}`,borderRadius:12}}>
+                <div style={{fontSize:12,color:C.muted,lineHeight:1.5}}>1. Tap “Export my data”</div>
+                <div style={{fontSize:12,color:C.muted,lineHeight:1.5}}>2. When the file appears, tap “More…”</div>
+                <div style={{fontSize:12,color:C.muted,lineHeight:1.5}}>3. Tap “Save to Files”</div>
+                <div style={{fontSize:12,color:C.muted,lineHeight:1.5}}>4. Choose iCloud Drive → Save</div>
+                <div style={{fontSize:12,color:C.muted,lineHeight:1.5}}>5. Your backup is now safe in the cloud</div>
+              </div>
+            )}
           </div>
           <button onClick={()=>fileRef.current&&fileRef.current.click()} style={{width:"100%",padding:16,
             background:C.surface,color:C.sage,border:`1.5px solid ${C.sage}`,borderRadius:14,
