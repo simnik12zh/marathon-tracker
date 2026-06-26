@@ -376,7 +376,7 @@ function KmStepper({value,onAdjust,raw,setRaw,typing,setTyping,accent}) {
     <div style={{display:"flex",alignItems:"center",gap:10}}>
       <button onClick={()=>onAdjust(-0.5)} style={stepBtn}>−</button>
       <div onClick={()=>setTyping(true)} style={{flex:1,textAlign:"center",cursor:"pointer"}}>
-        <span style={{fontSize:38,fontWeight:700,color:accent,fontFamily:"monospace",lineHeight:1}}>{fmtKm(value)}</span>
+        <KmBig value={value} color={accent} size={38}/>
         <span style={{fontSize:18,color:accent,fontWeight:500}}> km</span>
         <div style={{fontSize:11,color:C.subtle,marginTop:3}}>tap to type exact</div>
       </div>
@@ -480,12 +480,12 @@ function EditDayScreen({dateKey:dk,entry,onSave,onBack}) {
 
 // Big monospace km value with the decimal rendered smaller (28px) so the
 // fixed-width gap around the dot reads as intentional rather than broken.
-function KmBig({value,color}) {
+function KmBig({value,color,size=42}) {
   const [intPart,decPart]=fmtKm(value).split(".");
   return (
     <span style={{fontFamily:"monospace",fontWeight:700,color,lineHeight:1,whiteSpace:"nowrap"}}>
-      <span style={{fontSize:42}}>{intPart}</span>
-      {decPart!=null&&<span style={{fontSize:28}}>.{decPart}</span>}
+      <span style={{fontSize:size}}>{intPart}</span>
+      {decPart!=null&&<span style={{fontSize:Math.round(size*0.66)}}>.{decPart}</span>}
     </span>
   );
 }
@@ -931,8 +931,12 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
             padding:"8px 16px calc(20px + env(safe-area-inset-bottom))",
             animation:"sheetUp .25s ease-out"}}>
             <style>{"@keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}"}</style>
-            <div style={{width:36,height:4,borderRadius:2,background:C.border,
-              margin:"6px auto 14px"}}/>
+            {/* Tappable grab handle — tap (or tap outside) to dismiss. */}
+            <button onClick={()=>setSheetOpen(false)} aria-label="Close"
+              style={{display:"block",width:"100%",background:"none",border:"none",
+                cursor:"pointer",padding:"6px 0 14px",WebkitTapHighlightColor:"transparent"}}>
+              <div style={{width:40,height:5,borderRadius:3,background:C.borderSt,margin:"0 auto"}}/>
+            </button>
 
             <button onClick={()=>{setSheetOpen(false);onEdit(viewKey);}} style={sheetRow}>
               ✏  Add / change run
@@ -1120,7 +1124,9 @@ function MonthView({today,plan,moOff,setMoOff,onEdit}) {
               border:`1.5px solid ${e.completed?C.done:isT?C.sage:hasKm?C.border:"transparent"}`,
               outline:isT?`2px solid ${C.sage}`:"none",outlineOffset:-1,
               WebkitTapHighlightColor:"transparent"}}>
-              <div style={{fontSize:13,fontWeight:600,color:C.text,lineHeight:1}}>
+              {/* Dim days with no planned session so workout days stand out. */}
+              <div style={{fontSize:13,fontWeight:(hasKm||isT)?600:400,
+                color:(hasKm||isT)?C.text:C.borderSt,lineHeight:1}}>
                 {new Date(dk+"T00:00:00").getDate()}
               </div>
               {hasKm&&(
