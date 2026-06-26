@@ -22,8 +22,12 @@ function fmtKm(n) {
   return n % 1 === 0 ? `${n}` : `${n.toFixed(1)}`;
 }
 
-function buildUserMessage(ctx) {
+// Render the athlete's current situation as a context block that is appended to
+// the system prompt — so the coach always has it, however long the chat grows.
+function buildContextBlock(ctx) {
   const lines = [];
+  lines.push("Here is the runner's current situation. Ground your advice in it; don't invent numbers you weren't given.");
+  lines.push("");
   lines.push(`Race: ${ctx.raceName || "the marathon"} on ${ctx.raceDate || "race day"}.`);
   if (ctx.daysUntilRace != null) {
     lines.push(`Days until race: ${ctx.daysUntilRace}.`);
@@ -32,7 +36,7 @@ function buildUserMessage(ctx) {
 
   const d = ctx.day || {};
   lines.push("");
-  lines.push("The session I'm asking about:");
+  lines.push("The session currently in view (what the runner is most likely asking about):");
   lines.push(`- Date: ${d.label || d.date || "today"}`);
   lines.push(`- Workout: ${d.workout?.trim() || "Rest day"}`);
   if (d.plannedKm) lines.push(`- Planned distance: ${fmtKm(d.plannedKm)} km`);
@@ -45,7 +49,7 @@ function buildUserMessage(ctx) {
 
   if (Array.isArray(ctx.recent) && ctx.recent.length) {
     lines.push("");
-    lines.push("My recent completed sessions (most recent first):");
+    lines.push("Recent completed sessions (most recent first):");
     for (const r of ctx.recent) {
       const feeling = r.feeling ? `, felt "${r.feeling}"` : "";
       lines.push(`- ${r.date}: ${r.workout} — ${fmtKm(r.km)} km${feeling}`);
@@ -60,9 +64,15 @@ function buildUserMessage(ctx) {
     lines.push(`This month so far: ${fmtKm(ctx.month.doneKm)} of ${fmtKm(ctx.month.plannedKm)} km planned.`);
   }
 
-  lines.push("");
-  lines.push("Talk me through this session.");
   return lines.join("\n");
+}
+
+// Keep only well-formed {role, content} turns to send to the model.
+function sanitizeMessages(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())
+    .map((m) => ({ role: m.role, content: m.content }));
 }
 
 export default async function handler(req, res) {
@@ -89,6 +99,12 @@ export default async function handler(req, res) {
     return;
   }
 
+  const messages = sanitizeMessages(ctx.messages);
+  if (!messages.length) {
+    res.status(400).json({ error: "No messages provided" });
+    return;
+  }
+
   const client = new Anthropic({ apiKey });
 
   try {
@@ -96,8 +112,8 @@ export default async function handler(req, res) {
       model: MODEL,
       max_tokens: 1024,
       thinking: { type: "disabled" }, // snappy, chat-style replies — no thinking latency
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: buildUserMessage(ctx) }],
+      system: `${SYSTEM_PROMPT}\n\n${buildContextBlock(ctx)}`,
+      messages,
     });
 
     // Plain-text streaming: the client reads the body incrementally and appends

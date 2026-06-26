@@ -478,9 +478,24 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
   const isToday=dayOff===0;
   const [editingKm,setEditingKm]=useState(false);
   const [kmInput,setKmInput]=useState("");
-  const [coach,setCoach]=useState({status:"idle",text:""});
 
-  const navDay=(delta)=>{ setDayOff(o=>o+delta); setEditingKm(false); setCoach({status:"idle",text:""}); };
+  // ── AI coach chat state ─────────────────────────────────────────────────────
+  const [coachOpen,setCoachOpen]=useState(false);
+  const [messages,setMessages]=useState([]);   // [{role:"user"|"assistant",content}]
+  const [input,setInput]=useState("");
+  const [sending,setSending]=useState(false);
+  const [coachError,setCoachError]=useState(false);
+  const coachKey=`coach-${viewKey}`;
+  // Load this day's saved conversation; reset the chat whenever the day changes.
+  useEffect(()=>{
+    setCoachOpen(false); setInput(""); setSending(false); setCoachError(false);
+    let stored=[];
+    try { const raw=localStorage.getItem(coachKey); if (raw) stored=JSON.parse(raw); } catch {}
+    setMessages(Array.isArray(stored)?stored:[]);
+  },[viewKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const persistCoach=(msgs)=>{ try { localStorage.setItem(coachKey,JSON.stringify(msgs)); } catch {} };
+
+  const navDay=(delta)=>{ setDayOff(o=>o+delta); setEditingKm(false); };
   const completeRun=()=>updDay(viewKey,{completed:true,kmDone:e.km||0});
   const adjustKm=(delta)=>{
     const next=Math.max(0,parseFloat((ran+delta).toFixed(1)));
@@ -528,27 +543,46 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
       month:{doneKm:mDone,plannedKm:mTarget},
     };
   };
-  const askCoach=async()=>{
-    setCoach({status:"loading",text:""});
+  // Send `base` (the conversation so far) to the coach and stream the reply.
+  // An empty assistant message is appended for the live stream / typing dots.
+  const sendToCoach=async(base)=>{
+    setSending(true); setCoachError(false);
+    setMessages([...base,{role:"assistant",content:""}]);
     try {
       const resp=await fetch("/api/coach",{
         method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify(buildCoachContext()),
+        body:JSON.stringify({...buildCoachContext(),messages:base}),
       });
       if (!resp.ok||!resp.body) throw new Error("bad response");
       const reader=resp.body.getReader(), decoder=new TextDecoder();
       let acc="";
-      setCoach({status:"streaming",text:""});
       for (;;) {
         const {done,value}=await reader.read();
         if (done) break;
         acc+=decoder.decode(value,{stream:true});
-        setCoach({status:"streaming",text:acc});
+        setMessages([...base,{role:"assistant",content:acc}]);
       }
-      setCoach({status:acc.trim()?"done":"error",text:acc});
+      if (!acc.trim()) throw new Error("empty response");
+      const final=[...base,{role:"assistant",content:acc}];
+      setMessages(final); persistCoach(final);
     } catch {
-      setCoach({status:"error",text:""});
+      setCoachError(true);
+      setMessages(base);            // drop the streaming placeholder
+    } finally {
+      setSending(false);
     }
+  };
+  const startCoach=()=>sendToCoach([{role:"user",content:"Tell me about today's session"}]);
+  const sendCoach=()=>{
+    const text=input.trim();
+    if (!text||sending) return;
+    setInput("");
+    sendToCoach([...messages,{role:"user",content:text}]);
+  };
+  const retryCoach=()=>{ if (!sending&&messages.length) sendToCoach(messages); };
+  const newCoachChat=()=>{
+    setMessages([]); setInput(""); setCoachError(false);
+    try { localStorage.removeItem(coachKey); } catch {}
   };
 
   return (
@@ -761,8 +795,8 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
         {e.workout?.trim()&&(
           <div style={{marginTop:14,paddingTop:14,
             borderTop:`1px solid ${e.completed?"rgba(114,173,106,.2)":C.border}`}}>
-            {coach.status==="idle"
-              ? <button onClick={askCoach} style={{width:"100%",padding:"13px",
+            {!coachOpen
+              ? <button onClick={()=>setCoachOpen(true)} style={{width:"100%",padding:"13px",
                   background:C.sage,color:"#fff",border:"none",borderRadius:12,
                   fontFamily:"inherit",fontSize:15,fontWeight:600,cursor:"pointer",
                   display:"flex",alignItems:"center",justifyContent:"center",gap:8,
@@ -772,38 +806,94 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
               : <div style={{background:C.sageLt,borderRadius:14,padding:"14px 16px",
                   borderLeft:`3px solid ${C.sage}`}}>
                   <style>{"@keyframes coachBlink{0%,80%,100%{opacity:.25}40%{opacity:1}}"}</style>
-                  <div style={{display:"flex",alignItems:"center",marginBottom:8}}>
+                  <div style={{display:"flex",alignItems:"center",marginBottom:10}}>
                     <span style={{fontSize:11,fontWeight:700,color:C.sageDk,
                       textTransform:"uppercase",letterSpacing:".07em"}}>🏃 Coach</span>
-                    <button onClick={()=>setCoach({status:"idle",text:""})}
+                    {messages.length>0&&(
+                      <button onClick={newCoachChat}
+                        style={{marginLeft:12,background:"none",border:"none",cursor:"pointer",
+                          color:C.muted,fontSize:11,fontWeight:600,textDecoration:"underline",
+                          padding:0,WebkitTapHighlightColor:"transparent"}}>New conversation</button>
+                    )}
+                    <button onClick={()=>setCoachOpen(false)}
                       style={{marginLeft:"auto",background:"none",border:"none",
                         cursor:"pointer",color:C.muted,fontSize:18,lineHeight:1,padding:2,
                         WebkitTapHighlightColor:"transparent"}}>×</button>
                   </div>
-                  {coach.status==="loading"&&(
-                    <div style={{display:"flex",gap:5,padding:"4px 0"}}>
-                      {[0,1,2].map(i=>(
-                        <span key={i} style={{width:7,height:7,borderRadius:"50%",
-                          background:C.sage,display:"inline-block",
-                          animation:`coachBlink 1.2s ${i*0.16}s infinite ease-in-out`}}/>
+
+                  {/* Messages */}
+                  {messages.length>0&&(
+                    <div style={{maxHeight:300,overflowY:"auto",display:"flex",
+                      flexDirection:"column",gap:8,marginBottom:10}}>
+                      {messages.map((m,i)=>(
+                        m.role==="assistant"
+                          ? <div key={i} style={{alignSelf:"flex-start",maxWidth:"92%",
+                              background:C.surface,borderLeft:`3px solid ${C.sage}`,
+                              borderRadius:"4px 12px 12px 4px",padding:"10px 12px"}}>
+                              {m.content
+                                ? <p style={{margin:0,fontSize:14,lineHeight:1.6,color:C.text,
+                                    whiteSpace:"pre-wrap"}}>{m.content}</p>
+                                : <div style={{display:"flex",gap:5,padding:"2px 0"}}>
+                                    {[0,1,2].map(j=>(
+                                      <span key={j} style={{width:7,height:7,borderRadius:"50%",
+                                        background:C.sage,display:"inline-block",
+                                        animation:`coachBlink 1.2s ${j*0.16}s infinite ease-in-out`}}/>
+                                    ))}
+                                  </div>}
+                            </div>
+                          : <div key={i} style={{alignSelf:"flex-end",maxWidth:"85%",
+                              background:C.surface,border:`1px solid ${C.border}`,
+                              borderRadius:"12px 12px 4px 12px",padding:"10px 12px"}}>
+                              <p style={{margin:0,fontSize:14,lineHeight:1.55,color:C.text,
+                                whiteSpace:"pre-wrap"}}>{m.content}</p>
+                            </div>
                       ))}
                     </div>
                   )}
-                  {coach.text&&(
-                    <p style={{margin:0,fontSize:14,lineHeight:1.6,color:C.text,
-                      whiteSpace:"pre-wrap"}}>{coach.text}</p>
+
+                  {/* Conversation starter — one-tap, only before any chat / typing */}
+                  {messages.length===0&&!input.trim()&&(
+                    <button onClick={startCoach} disabled={sending}
+                      style={{width:"100%",padding:"11px 14px",background:C.surface,
+                        color:C.sageDk,border:`1px solid ${C.sage}`,borderRadius:12,
+                        fontFamily:"inherit",fontSize:14,fontWeight:600,
+                        cursor:sending?"default":"pointer",marginBottom:10,
+                        WebkitTapHighlightColor:"transparent"}}>
+                      Tell me about today's session
+                    </button>
                   )}
-                  {coach.status==="error"&&(
-                    <div>
-                      <p style={{margin:"0 0 10px",fontSize:13,color:C.muted,lineHeight:1.5}}>
+
+                  {coachError&&(
+                    <div style={{marginBottom:10}}>
+                      <p style={{margin:"0 0 8px",fontSize:13,color:C.muted,lineHeight:1.5}}>
                         Couldn't reach the coach right now. Check your connection and try again.
                       </p>
-                      <button onClick={askCoach} style={{fontSize:13,fontWeight:600,
-                        color:C.sageDk,background:C.surface,border:`1px solid ${C.sage}`,
-                        borderRadius:10,padding:"8px 14px",cursor:"pointer",fontFamily:"inherit",
-                        WebkitTapHighlightColor:"transparent"}}>↻ Try again</button>
+                      {messages.length>0&&(
+                        <button onClick={retryCoach} style={{fontSize:13,fontWeight:600,
+                          color:C.sageDk,background:C.surface,border:`1px solid ${C.sage}`,
+                          borderRadius:10,padding:"8px 14px",cursor:"pointer",fontFamily:"inherit",
+                          WebkitTapHighlightColor:"transparent"}}>↻ Try again</button>
+                      )}
                     </div>
                   )}
+
+                  {/* Input row */}
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    <input type="text" value={input}
+                      onChange={ev=>setInput(ev.target.value)}
+                      onKeyDown={ev=>{ if (ev.key==="Enter"){ ev.preventDefault(); sendCoach(); } }}
+                      placeholder="Ask the coach…" disabled={sending}
+                      style={{flex:1,border:`1px solid ${C.border}`,borderRadius:12,
+                        padding:"11px 14px",fontFamily:"inherit",fontSize:15,color:C.text,
+                        background:C.surface,outline:"none",boxSizing:"border-box",
+                        WebkitAppearance:"none"}}/>
+                    <button onClick={sendCoach} disabled={sending||!input.trim()}
+                      style={{padding:"11px 16px",background:input.trim()&&!sending?C.sage:C.border,
+                        color:"#fff",border:"none",borderRadius:12,fontFamily:"inherit",
+                        fontSize:14,fontWeight:600,
+                        cursor:input.trim()&&!sending?"pointer":"default",flexShrink:0,
+                        WebkitTapHighlightColor:"transparent"}}>Send</button>
+                  </div>
                 </div>
             }
           </div>
