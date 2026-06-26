@@ -124,6 +124,11 @@ const TIPS = {
     color:"#7a8a9a", bg:"rgba(122,138,154,0.1)",
     text:"Pilates builds the core strength, posture and stability that runners rely on. Strengthening these deep muscles helps prevent injury and improves your running economy — a smart complement to your training on easier days.",
   },
+  strength: {
+    label:"🏋️  Strength training",
+    color:"#7a8a9a", bg:"rgba(122,138,154,0.1)",
+    text:"Targeted strength work that makes you a more resilient runner. Focus on single-leg exercises, hip stabilisers, calf raises, and core. These sessions protect your joints and tendons as running volume increases.",
+  },
   walking: {
     label:"🚶  Easy movement",
     color:"#5a8a58", bg:"rgba(90,138,88,0.08)",
@@ -169,6 +174,7 @@ function getTip(workout) {
   if (w.includes("easy") || w.includes("first session")) return TIPS.easy;
   if (w.includes("yoga")) return TIPS.yoga;
   if (w.includes("pilates")) return TIPS.pilates;
+  if (w.includes("strength") || w.includes("kraft")) return TIPS.strength;
   if (w.includes("walking") || w.includes("hiking")) return TIPS.walking;
   if (w.includes("cycling") || w.includes("cycle")) return TIPS.cycling;
   if (w.includes("hiit")) return TIPS.hiit;
@@ -181,6 +187,7 @@ const ALTS = [
   { emoji:"💥", label:"HIIT" },
   { emoji:"🧘", label:"Yoga" },
   { emoji:"🤸", label:"Pilates" },
+  { emoji:"🏋️", label:"Strength" },
   { emoji:"🚶", label:"Walking" },
   { emoji:"🚴", label:"Cycling" },
   { emoji:"⋯", label:"Other" },
@@ -630,14 +637,31 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
       {/* Stats */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
         {[
-          [hasKm?`${fmtKm(target)} km`:"Rest",isToday?"Today":d.toLocaleDateString("en-US",{weekday:"short"}),hasKm],
-          [wkTarget>0?`${fmtKm(wkDone)}/${fmtKm(wkTarget)}`:"—","km / week",false],
-          [mTarget>0?`${fmtKm(mDone)}/${fmtKm(mTarget)}`:"—","km / month",false],
-        ].map(([val,lbl,hi])=>(
-          <div key={lbl} style={{background:C.surface,border:`1px solid ${C.border}`,
+          {
+            // Planned km in normal colour until the run is logged; actual km in green once done.
+            node: hasKm
+              ? <span style={{color:e.completed?C.done:C.text}}>{fmtKm(e.completed?ran:target)} km</span>
+              : "Rest",
+            lbl: hasKm&&!e.completed ? "planned" : (isToday?"Today":d.toLocaleDateString("en-US",{weekday:"short"})),
+          },
+          {
+            // Green only counts km actually run; the planned total stays neutral.
+            node: wkTarget>0
+              ? <><span style={{color:wkDone>0?C.done:C.text}}>{fmtKm(wkDone)}</span>/{fmtKm(wkTarget)}</>
+              : "—",
+            lbl: "km / week",
+          },
+          {
+            node: mTarget>0
+              ? <><span style={{color:mDone>0?C.done:C.text}}>{fmtKm(mDone)}</span>/{fmtKm(mTarget)}</>
+              : "—",
+            lbl: "km / month",
+          },
+        ].map(({node,lbl},i)=>(
+          <div key={i} style={{background:C.surface,border:`1px solid ${C.border}`,
             borderRadius:14,padding:"12px 6px",textAlign:"center"}}>
             <div style={{fontFamily:"monospace",fontSize:16,fontWeight:700,
-              color:hi?C.sage:C.text,lineHeight:1.2}}>{val}</div>
+              color:C.text,lineHeight:1.2}}>{node}</div>
             <div style={{fontSize:10,color:C.muted,marginTop:4,textTransform:"uppercase",
               letterSpacing:".05em"}}>{lbl}</div>
           </div>
