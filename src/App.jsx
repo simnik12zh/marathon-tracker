@@ -194,6 +194,20 @@ const ALTS = [
   { emoji:"🤒", label:"Sick / Injured" },
 ];
 
+// ⋯ sheet "What are you doing today?" grid.
+const SHEET_OPTIONS = [
+  { emoji: '🏃', label: 'Run',          action: 'run' },
+  { emoji: '💥', label: 'HIIT',         action: 'hiit' },
+  { emoji: '🧘', label: 'Yoga',         action: 'yoga' },
+  { emoji: '🤸', label: 'Pilates',      action: 'pilates' },
+  { emoji: '🏋️', label: 'Strength',    action: 'strength' },
+  { emoji: '🚶', label: 'Walking',      action: 'walking' },
+  { emoji: '🚴', label: 'Cycling',      action: 'cycling' },
+  { emoji: '⋯',  label: 'Other',        action: 'other' },
+  { emoji: '🤒', label: 'Sick/Injured', action: 'sick' },
+  { emoji: '😴', label: 'Rest day',     action: 'rest' },
+];
+
 const FEELINGS = [
   { value:1, emoji:"😫", label:"Dead legs" },
   { value:2, emoji:"😕", label:"Tough" },
@@ -618,11 +632,14 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
   const mTarget=mDays.reduce((s,dk)=>s+plannedKm(plan[dk]),0);
   const mDone=mDays.reduce((s,dk)=>s+actualKm(plan[dk]),0);
 
-  // Shared style for the bottom-sheet action rows.
-  const sheetRow={display:"flex",alignItems:"center",gap:6,width:"100%",
-    background:"none",border:"none",borderRadius:12,padding:"14px 10px",
-    fontFamily:"inherit",fontSize:16,fontWeight:500,color:C.text,cursor:"pointer",
-    textAlign:"left",WebkitTapHighlightColor:"transparent"};
+  // ⋯ sheet option handler: Run opens the editor, Rest clears the day,
+  // everything else sets the workout to "<emoji> <label>".
+  const onSheetOption=(opt)=>{
+    setSheetOpen(false);
+    if (opt.action==="run") { onEdit(viewKey); return; }
+    if (opt.action==="rest") { updDay(viewKey,{workout:'',km:null,kmDone:null,completed:false}); return; }
+    updDay(viewKey,{workout:`${opt.emoji} ${opt.label}`,km:null,kmDone:null,completed:false});
+  };
 
   return (
     <div {...swipe} style={{padding:"16px 16px 24px"}}>
@@ -858,27 +875,18 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
               <div style={{width:40,height:5,borderRadius:3,background:C.borderSt,margin:"0 auto"}}/>
             </button>
 
-            <button onClick={()=>{setSheetOpen(false);onEdit(viewKey);}} style={sheetRow}>
-              ✏  Add / change run
-            </button>
-            {e.workout?.trim()&&(
-              <button onClick={()=>{setSheetOpen(false);updDay(viewKey,{workout:'',km:null,kmDone:null,completed:false});}}
-                style={{...sheetRow,color:"#c05050"}}>
-                🗑  Remove workout
-              </button>
-            )}
-
-            <div style={{fontSize:11,color:C.muted,margin:"16px 4px 10px",
-              textTransform:"uppercase",letterSpacing:".06em"}}>Switch to</div>
-            <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
-              {ALTS.filter(a=>!e.workout?.includes(a.label)).map(a=>(
-                <button key={a.label}
-                  onClick={()=>{setSheetOpen(false);updDay(viewKey,{workout:`${a.emoji} ${a.label}`,km:null,kmDone:null,completed:false});}}
-                  style={{fontSize:14,color:C.text,background:C.bg,
-                    border:`1px solid ${C.border}`,borderRadius:22,
-                    padding:"12px 16px",cursor:"pointer",fontFamily:"inherit",
-                    WebkitTapHighlightColor:"transparent"}}>
-                  {a.emoji} {a.label}
+            <div style={{fontSize:16,fontWeight:600,color:C.text,margin:"4px 4px 16px"}}>
+              What are you doing today?
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+              {SHEET_OPTIONS.map(opt=>(
+                <button key={opt.action} onClick={()=>onSheetOption(opt)}
+                  style={{display:"flex",flexDirection:"column",alignItems:"center",
+                    justifyContent:"center",gap:5,minHeight:64,padding:"12px 4px",
+                    background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,
+                    cursor:"pointer",fontFamily:"inherit",WebkitTapHighlightColor:"transparent"}}>
+                  <span style={{fontSize:24,lineHeight:1}}>{opt.emoji}</span>
+                  <span style={{fontSize:11,color:C.muted,textAlign:"center",lineHeight:1.15}}>{opt.label}</span>
                 </button>
               ))}
             </div>
