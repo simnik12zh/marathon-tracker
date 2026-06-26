@@ -235,7 +235,7 @@ const C = {
   sage:"#8B9E8A", sageLt:"rgba(139,158,138,0.15)", sageDk:"#4d6b4c",
   warm:"#C4A882", done:"#72ad6a", doneLt:"rgba(114,173,106,0.13)",
   surface:"#FFFFFF", bg:"#F5F3EF", border:"#E5E1D8", borderSt:"#C8C4BA",
-  text:"#2A2A2A", muted:"#888888", subtle:"#CECBC3",
+  text:"#2A2A2A", muted:"#888888", subtle:"#736D60",
 };
 
 function Chk({size=14,color="#fff"}) {
@@ -676,17 +676,29 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
             </div>
           </div>
           {e.completed
-            ? <button onClick={()=>updDay(viewKey,{completed:false,kmDone:null})}
-                style={{width:64,height:64,borderRadius:"50%",border:"none",
-                  background:C.done,cursor:"pointer",display:"flex",
-                  alignItems:"center",justifyContent:"center",flexShrink:0,
-                  animation:"checkPop .35s ease-out",
-                  WebkitTapHighlightColor:"transparent"}}><Chk size={22}/></button>
-            : <button onClick={hasKm?completeRun:()=>updDay(viewKey,{completed:true})}
-                style={{width:64,height:64,borderRadius:"50%",
-                  border:`2.5px solid ${C.borderSt}`,background:"transparent",
-                  cursor:"pointer",flexShrink:0,
-                  WebkitTapHighlightColor:"transparent"}}/>
+            ? <div style={{display:"flex",flexDirection:"column",alignItems:"center",
+                gap:5,flexShrink:0}}>
+                <button onClick={()=>updDay(viewKey,{completed:false,kmDone:null})}
+                  aria-label="Completed — tap to undo"
+                  style={{width:64,height:64,borderRadius:"50%",border:"none",
+                    background:C.done,cursor:"pointer",display:"flex",
+                    alignItems:"center",justifyContent:"center",
+                    animation:"checkPop .35s ease-out",
+                    WebkitTapHighlightColor:"transparent"}}><Chk size={22}/></button>
+                <span style={{fontSize:10,fontWeight:700,color:C.done,
+                  textTransform:"uppercase",letterSpacing:".05em"}}>Done</span>
+              </div>
+            : <div style={{display:"flex",flexDirection:"column",alignItems:"center",
+                gap:5,flexShrink:0}}>
+                <button onClick={hasKm?completeRun:()=>updDay(viewKey,{completed:true})}
+                  aria-label="Mark run as done"
+                  style={{width:64,height:64,borderRadius:"50%",
+                    border:`2.5px solid ${C.sage}`,background:C.sageLt,
+                    cursor:"pointer",
+                    WebkitTapHighlightColor:"transparent"}}/>
+                <span style={{fontSize:10,fontWeight:700,color:C.sageDk,
+                  textTransform:"uppercase",letterSpacing:".05em"}}>Tap to log</span>
+              </div>
           }
           <button onClick={()=>setSheetOpen(true)} aria-label="More options"
             style={{width:36,height:36,borderRadius:"50%",border:"none",
@@ -799,9 +811,9 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
       {e.workout?.trim()&&(
         <div style={{marginTop:16}}>
             {!coachOpen
-              ? <button onClick={()=>setCoachOpen(true)} style={{width:"100%",padding:"13px",
-                  background:C.sage,color:"#fff",border:"none",borderRadius:12,
-                  fontFamily:"inherit",fontSize:15,fontWeight:600,cursor:"pointer",
+              ? <button onClick={()=>setCoachOpen(true)} style={{width:"100%",padding:"12px",
+                  background:"transparent",color:C.sageDk,border:`1.5px solid ${C.sage}`,
+                  borderRadius:12,fontFamily:"inherit",fontSize:15,fontWeight:600,cursor:"pointer",
                   display:"flex",alignItems:"center",justifyContent:"center",gap:8,
                   WebkitTapHighlightColor:"transparent"}}>
                   💬 Ask the coach
