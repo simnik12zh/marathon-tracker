@@ -129,6 +129,11 @@ const TIPS = {
     color:"#7a8a5a", bg:"rgba(139,158,138,0.1)",
     text:"Cycling builds aerobic capacity and leg strength without ground impact. Keep it easy if you're swapping a recovery session, moderate if replacing something harder.",
   },
+  hiit: {
+    label:"💥  High intensity",
+    color:"#c05050", bg:"rgba(192,80,80,0.08)",
+    text:"Short, hard efforts with recovery between. Great cross-training for marathon runners — builds power and burns high calories. Keep sessions under 30 minutes and avoid doing this the day before a long run.",
+  },
   other: {
     label:"⋯  Cross-training",
     color:"#888888", bg:"rgba(138,138,138,0.08)",
@@ -160,12 +165,14 @@ function getTip(workout) {
   if (w.includes("yoga") || w.includes("pilates")) return TIPS.yoga;
   if (w.includes("walking") || w.includes("hiking")) return TIPS.walking;
   if (w.includes("cycling") || w.includes("cycle")) return TIPS.cycling;
+  if (w.includes("hiit")) return TIPS.hiit;
   if (w.includes("⋯") || w.includes("other")) return TIPS.other;
   if (w.includes("sick") || w.includes("injur")) return TIPS.sick;
   return null;
 }
 
 const ALTS = [
+  { emoji:"💥", label:"HIIT" },
   { emoji:"🧘", label:"Yoga / Pilates" },
   { emoji:"🚶", label:"Walking" },
   { emoji:"🚴", label:"Cycling" },
@@ -329,12 +336,63 @@ function SetupScreen({initName,initDate,isEdit,onBack,onSave}) {
 }
 
 // ─── Edit day ─────────────────────────────────────────────────────────────────
+const WORKOUT_OPTIONS = [
+  "Easy run","Easy recovery run","Long run","Tempo run",
+  "Track session – 6×800m","Track session – 8×1km","Sharpener – 5×1km",
+  "Easy run with strides","Easy jog with strides","Easy jog","Shake-out jog",
+  "💥 HIIT","🧘 Yoga / Pilates","🚶 Walking","🚴 Cycling","⋯ Other","🤒 Sick / Injured",
+];
+
+// Shared km stepper (−/+0.5km) with a "tap to type exact" numeric input.
+function KmStepper({value,onAdjust,raw,setRaw,typing,setTyping,accent}) {
+  const stepBtn={width:48,height:48,borderRadius:"50%",background:C.bg,
+    border:`1px solid ${C.border}`,fontSize:26,cursor:"pointer",color:C.text,
+    display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+    WebkitTapHighlightColor:"transparent"};
+  if (typing) {
+    return (
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <input type="text" inputMode="decimal" autoFocus value={raw}
+          onChange={e=>setRaw(e.target.value)}
+          style={{width:120,border:`1.5px solid ${C.borderSt}`,borderRadius:12,
+            padding:"12px 14px",fontFamily:"monospace",fontSize:22,fontWeight:700,
+            color:C.text,background:C.surface,outline:"none",boxSizing:"border-box",
+            textAlign:"center",WebkitAppearance:"none"}}/>
+        <span style={{fontSize:17,color:C.muted,fontWeight:500}}>km</span>
+        <button onClick={()=>setTyping(false)} style={{marginLeft:"auto",padding:"11px 18px",
+          background:accent,color:"#fff",border:"none",borderRadius:10,fontFamily:"inherit",
+          fontSize:14,fontWeight:600,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>✓ Done</button>
+      </div>
+    );
+  }
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <button onClick={()=>onAdjust(-0.5)} style={stepBtn}>−</button>
+      <div onClick={()=>setTyping(true)} style={{flex:1,textAlign:"center",cursor:"pointer"}}>
+        <span style={{fontSize:38,fontWeight:700,color:accent,fontFamily:"monospace",lineHeight:1}}>{fmtKm(value)}</span>
+        <span style={{fontSize:18,color:accent,fontWeight:500}}> km</span>
+        <div style={{fontSize:11,color:C.subtle,marginTop:3}}>tap to type exact</div>
+      </div>
+      <button onClick={()=>onAdjust(0.5)} style={stepBtn}>+</button>
+    </div>
+  );
+}
+
 function EditDayScreen({dateKey:dk,entry,onSave,onBack}) {
-  const [workout,setWorkout]=useState(entry.workout||"");
+  const initialKnown=!!entry.workout&&WORKOUT_OPTIONS.includes(entry.workout);
+  const [workoutSel,setWorkoutSel]=useState(initialKnown?entry.workout:"Custom…");
+  const [customWorkout,setCustomWorkout]=useState(initialKnown?"":(entry.workout||""));
   const [km,setKm]=useState(entry.km!=null?String(entry.km):"");
+  const [kmTyping,setKmTyping]=useState(false);
   const [kmDone,setKmDone]=useState(entry.kmDone!=null?String(entry.kmDone):"");
+  const [kmDoneTyping,setKmDoneTyping]=useState(false);
   const [completed,setCompleted]=useState(!!entry.completed);
   const [notes,setNotes]=useState(entry.notes||"");
+  const workout=workoutSel==="Custom…"?customWorkout:workoutSel;
+  const kmNum=parseFloat(km)||0;
+  const kmDoneNum=parseFloat(kmDone)||0;
+  const stepKm=(delta)=>setKm(String(Math.max(0,parseFloat((kmNum+delta).toFixed(1)))));
+  const stepKmDone=(delta)=>setKmDone(String(Math.max(0,parseFloat((kmDoneNum+delta).toFixed(1)))));
   const d=new Date(dk+"T00:00:00");
   const lbl=d.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
   const inp2={width:"100%",border:`1px solid ${C.border}`,borderRadius:12,
@@ -357,25 +415,26 @@ function EditDayScreen({dateKey:dk,entry,onSave,onBack}) {
       <div style={{padding:20}}>
         <label style={{fontSize:12,textTransform:"uppercase",letterSpacing:".08em",
           color:C.muted,display:"block",marginBottom:8}}>Workout</label>
-        <input style={inp2} placeholder="Easy run, Tempo run, Long run…"
-          value={workout} onChange={e=>setWorkout(e.target.value)}/>
+        <select value={workoutSel} onChange={e=>setWorkoutSel(e.target.value)}
+          style={{...inp2,WebkitAppearance:"menulist",appearance:"menulist",cursor:"pointer"}}>
+          {WORKOUT_OPTIONS.map(o=>(<option key={o} value={o}>{o}</option>))}
+          <option value="Custom…">Custom…</option>
+        </select>
+        {workoutSel==="Custom…"&&(
+          <input style={{...inp2,marginTop:10}} placeholder="Type a workout…"
+            value={customWorkout} onChange={e=>setCustomWorkout(e.target.value)}/>
+        )}
 
         <label style={{fontSize:12,textTransform:"uppercase",letterSpacing:".08em",
-          color:C.muted,display:"block",marginBottom:8,marginTop:20}}>Target distance</label>
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <input style={{...inp2,width:100}} type="number" min="0" step="0.5"
-            placeholder="0" value={km} onChange={e=>setKm(e.target.value)}/>
-          <span style={{fontSize:17,color:C.muted,fontWeight:500}}>km</span>
-        </div>
+          color:C.muted,display:"block",marginBottom:10,marginTop:20}}>Target distance</label>
+        <KmStepper value={kmNum} onAdjust={stepKm} raw={km} setRaw={setKm}
+          typing={kmTyping} setTyping={setKmTyping} accent={C.sage}/>
 
         {entry.completed&&<>
           <label style={{fontSize:12,textTransform:"uppercase",letterSpacing:".08em",
-            color:C.muted,display:"block",marginBottom:8,marginTop:20}}>Actual km ran</label>
-          <div style={{display:"flex",alignItems:"center",gap:12}}>
-            <input style={{...inp2,width:100}} type="number" min="0" step="0.1"
-              placeholder={km||"0"} value={kmDone} onChange={e=>setKmDone(e.target.value)}/>
-            <span style={{fontSize:17,color:C.muted,fontWeight:500}}>km</span>
-          </div>
+            color:C.muted,display:"block",marginBottom:10,marginTop:20}}>Actual km ran</label>
+          <KmStepper value={kmDoneNum} onAdjust={stepKmDone} raw={kmDone} setRaw={setKmDone}
+            typing={kmDoneTyping} setTyping={setKmDoneTyping} accent={C.done}/>
         </>}
 
         <label style={{fontSize:12,textTransform:"uppercase",letterSpacing:".08em",
