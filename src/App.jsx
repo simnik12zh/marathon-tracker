@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-const SK = "marathon-v6";
+const SK = "marathon-v7";
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DL = ["M","T","W","T","F","S","S"];
 const DN = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
@@ -166,7 +166,7 @@ function getTip(workout) {
   if (w.includes("sharpener") || w.includes("5×1") || w.includes("5x1")) return TIPS.intervals_1km_5;
   if (w.includes("track") || w.includes("8×1") || w.includes("8x1")) return TIPS.intervals_1km_8;
   if (w.includes("tempo")) return TIPS.tempo;
-  if (w.includes("long run")) return TIPS.long;
+  if (w.includes("long run") || w.includes("test gels")) return TIPS.long;
   if (w.includes("recovery")) return TIPS.recovery;
   if (w.includes("strides") && w.includes("jog")) return TIPS.jog_strides;
   if (w.includes("strides")) return TIPS.strides;
@@ -177,7 +177,7 @@ function getTip(workout) {
   if (w.includes("strength") || w.includes("kraft")) return TIPS.strength;
   if (w.includes("walking") || w.includes("hiking")) return TIPS.walking;
   if (w.includes("cycling") || w.includes("cycle")) return TIPS.cycling;
-  if (w.includes("hiit")) return TIPS.hiit;
+  if (w.includes("hiit") || w.includes("boxing")) return TIPS.hiit;
   if (w.includes("⋯") || w.includes("other")) return TIPS.other;
   if (w.includes("sick") || w.includes("injur")) return TIPS.sick;
   return null;
@@ -204,30 +204,47 @@ const FEELINGS = [
 
 // ─── 17-week plan (race Sun 25 Oct 2026) ─────────────────────────────────────
 const PLAN_WEEKS = [
-  [null,['Easy run',7],['Easy run',8],['Easy run',8],null,['Long run',16],['Easy recovery run',8]],
-  [null,['Easy run',8],['Tempo run',9],['Easy run',10],null,['Long run',18],['Easy recovery run',8]],
-  [null,['Easy run',10],['Tempo run',10],['Easy run',10],null,['Long run',21],['Easy recovery run',8]],
-  [null,['Easy run',7],['Easy run',8],['Easy run',7],null,['Long run',15],['Easy recovery run',6]],
-  [null,['Track session – 6×800m',11],['Easy run',12],['Easy run',10],null,['Long run',23],['Easy recovery run',10]],
-  [null,['Tempo run',12],['Easy run',12],['Easy run',10],null,['Long run',25],['Easy recovery run',10]],
-  [null,['Track session – 8×1km',14],['Easy run',12],['Easy run',12],null,['Long run',26],['Easy recovery run',10]],
-  [null,['Easy run',8],['Easy run',10],['Easy run',8],null,['Long run',18],['Easy recovery run',6]],
-  [null,['Tempo run',14],['Easy run',12],['Easy run',10],null,['Long run',28],['Easy recovery run',10]],
-  [null,['Track session – 8×1km',14],['Easy run',12],['Easy run',10],null,['Long run',29],['Easy recovery run',10]],
-  [['Easy run',8],['Tempo run',12],['Easy run',12],['Easy run',10],null,['Long run',30],['Easy recovery run',8]],
-  [null,['Easy run',8],['Easy run',10],['Easy run',8],null,['Long run',18],['Easy recovery run',6]],
-  [null,['Tempo run',10],['Easy run',10],['Easy run',8],null,['Long run',22],['Easy recovery run',8]],
-  [null,['Sharpener – 5×1km',10],['Easy run',8],['Easy run',8],null,['Long run',18],['Easy recovery run',6]],
-  [null,['Tempo run',8],['Easy run',8],['Easy run',6],null,['Long run',14],['Easy recovery run',6]],
-  [null,['Easy run with strides',6],['Easy run',6],['Easy run',5],null,['Easy run',8],['Easy recovery run',5]],
-  [null,['Easy jog with strides',5],['Easy jog',4],null,['Shake-out jog',3],null,['Marathon – Race Day',42.2]],
+  // Week 1 (Jun 29) — Phase 1: Base
+  [['Pilates',null],['Easy run',8],['Strength',null],['Easy run',8],['Yoga',null],['Long run',16],['Easy recovery run',6]],
+  // Week 2 (Jul 6) — Phase 1: Base
+  [['Pilates',null],['Easy run',8],['HIIT Boxing',null],['Easy run',10],['Strength',null],['Long run',18],['Easy recovery run',6]],
+  // Week 3 (Jul 13) — Phase 1: Base
+  [['Pilates',null],['Easy run',10],['Strength',null],['Easy run',10],['Yoga',null],['Long run',20],['Easy recovery run',8]],
+  // Week 4 (Jul 20) — Deload
+  [['Yoga',null],['Easy run',7],['Pilates',null],['Easy run',8],null,['Long run',15],['Easy recovery run',6]],
+  // Week 5 (Jul 27) — Phase 2: Build
+  [['Pilates',null],['Easy run',10],['Tempo run',10],['Strength',null],['Easy run',8],['Long run',22],['Easy recovery run',8]],
+  // Week 6 (Aug 3) — Phase 2: Build
+  [['Pilates',null],['Easy run',10],['HIIT Boxing',null],['Tempo run',12],['Yoga',null],['Long run',24],['Easy recovery run',8]],
+  // Week 7 (Aug 10) — Phase 2: Build
+  [['Pilates',null],['Easy run',10],['Track session – 6×800m',11],['Strength',null],['Easy run',8],['Long run',26],['Easy recovery run',8]],
+  // Week 8 (Aug 17) — Deload
+  [['Yoga',null],['Easy run',8],['Pilates',null],['Easy run',8],null,['Long run',18],['Easy recovery run',6]],
+  // Week 9 (Aug 24) — Phase 3: Peak
+  [['Pilates',null],['Easy run',10],['Tempo run',14],['Strength',null],['Easy run',8],['Long run – test gels',28],['Easy recovery run',10]],
+  // Week 10 (Aug 31) — Phase 3: Peak
+  [['Pilates',null],['Easy run',10],['Track session – 8×1km',14],['Yoga',null],['Easy run',8],['Long run – test gels',30],['Easy recovery run',10]],
+  // Week 11 (Sep 7) — Peak week
+  [['Strength',null],['Easy run',10],['Tempo run',14],['Pilates',null],['Easy run',8],['Long run – test gels',32],['Easy recovery run',10]],
+  // Week 12 (Sep 14) — Deload
+  [['Yoga',null],['Easy run',8],['Pilates',null],['Easy run',8],null,['Long run',20],['Easy recovery run',6]],
+  // Week 13 (Sep 21) — Phase 4: Taper
+  [['Pilates',null],['Easy run',10],['Tempo run',10],['Strength',null],['Easy run',8],['Long run',22],['Easy recovery run',8]],
+  // Week 14 (Sep 28) — Taper
+  [['Yoga',null],['Easy run',8],['Sharpener – 5×1km',10],['Pilates',null],['Easy run',6],['Long run',18],['Easy recovery run',6]],
+  // Week 15 (Oct 5) — Taper
+  [['Pilates',null],['Easy run',8],['Tempo run',8],['Yoga',null],['Easy run',6],['Long run',14],['Easy recovery run',5]],
+  // Week 16 (Oct 12) — Final taper
+  [['Yoga',null],['Easy run with strides',6],['Pilates',null],['Easy run',5],null,['Easy run',8],['Easy recovery run',4]],
+  // Week 17 (Oct 19) — Race week
+  [['Pilates',null],['Easy jog with strides',5],['Easy jog',4],['Yoga',null],['Shake-out jog',3],null,['Marathon – Race Day',42.2]],
 ];
 
 function buildDefaultPlan() {
   const plan = {};
-  plan['2026-06-26'] = { workout:'First session – easy run', km:6 };
+  plan['2026-06-26'] = { workout:'Easy run', km:6 };
   plan['2026-06-27'] = { workout:'Long run', km:14 };
-  plan['2026-06-28'] = { workout:'Easy recovery run', km:6 };
+  plan['2026-06-28'] = { workout:'Yoga', km:null };
   PLAN_WEEKS.forEach((week,wi)=>{
     week.forEach((day,di)=>{
       const d=new Date(2026,5,29); d.setDate(d.getDate()+wi*7+di);
