@@ -312,10 +312,10 @@ function TipCard({workout, compact=false}) {
 }
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
-function SetupScreen({initName,initDate,isEdit,onBack,onSave}) {
+function SetupScreen({initName,initAthlete,isEdit,onBack,onSave}) {
+  const [a,setA]=useState(initAthlete||"");
   const [n,setN]=useState(initName||"");
-  const [d,setD]=useState(initDate||"");
-  const ok=n.trim()&&d;
+  const ok=n.trim();
   const inp={
     width:"100%",border:`1px solid ${C.border}`,borderRadius:12,
     padding:"14px 16px",fontFamily:"inherit",fontSize:16,color:C.text,
@@ -349,13 +349,14 @@ function SetupScreen({initName,initDate,isEdit,onBack,onSave}) {
       <div style={{background:C.surface,border:`1px solid ${C.border}`,
         borderRadius:20,padding:24,width:"100%",maxWidth:400}}>
         <label style={{fontSize:12,textTransform:"uppercase",letterSpacing:".08em",
-          color:C.muted,display:"block",marginBottom:8}}>Race name</label>
+          color:C.muted,display:"block",marginBottom:8}}>Your name</label>
+        <input style={inp} placeholder="e.g. Anna"
+          value={a} onChange={e=>setA(e.target.value)}/>
+        <label style={{fontSize:12,textTransform:"uppercase",letterSpacing:".08em",
+          color:C.muted,display:"block",marginBottom:8,marginTop:20}}>Race name</label>
         <input style={inp} placeholder="e.g. Berlin Marathon 2026"
           value={n} onChange={e=>setN(e.target.value)}/>
-        <label style={{fontSize:12,textTransform:"uppercase",letterSpacing:".08em",
-          color:C.muted,display:"block",marginBottom:8,marginTop:20}}>Race date</label>
-        <input style={inp} type="date" value={d} onChange={e=>setD(e.target.value)}/>
-        <button disabled={!ok} onClick={()=>onSave(n.trim(),d)} style={{
+        <button disabled={!ok} onClick={()=>onSave(a.trim(),n.trim())} style={{
           width:"100%",padding:16,background:ok?C.sage:C.subtle,color:"#fff",
           border:"none",borderRadius:14,fontFamily:"inherit",fontSize:17,fontWeight:600,
           cursor:ok?"pointer":"default",marginTop:24,
@@ -1151,7 +1152,7 @@ function JourneyView({plan,today,raceDate,onGoToWeek}) {
 }
 
 // ─── Coach screen (full-screen chat) ────────────────────────────────────────────
-function CoachScreen({viewKey,plan,raceName,raceDate,startDate,onBack}) {
+function CoachScreen({viewKey,plan,athleteName,raceName,raceDate,startDate,onBack}) {
   const [messages,setMessages]=useState([]);   // [{role:"user"|"assistant",content}]
   const [input,setInput]=useState("");
   const [sending,setSending]=useState(false);
@@ -1197,6 +1198,7 @@ function CoachScreen({viewKey,plan,raceName,raceDate,startDate,onBack}) {
     }
     const dleft=daysUntil(raceDate);
     return {
+      athleteName:athleteName?.trim()||null,
       raceName,raceDate,today,daysUntilRace:dleft,phase:phaseFor(dleft),
       day:{date:viewKey,label:`${dayName}, ${dayFull}`,workout:e.workout,
         plannedKm:target,actualKm:ran,completed:!!e.completed,feeling:feelingLabel(e.feeling)},
@@ -1317,6 +1319,7 @@ function CoachScreen({viewKey,plan,raceName,raceDate,startDate,onBack}) {
 export default function App() {
   const [loading,setLoading]=useState(true);
   const [name,setName]=useState("");
+  const [athleteName,setAthleteName]=useState("");
   const [raceDate,setRaceDate]=useState("");
   const [startDate,setStartDate]=useState("");
   const [plan,setPlan]=useState({});
@@ -1335,6 +1338,7 @@ export default function App() {
         try {
           const d=JSON.parse(stored);
           if(d.name) setName(d.name);
+          if(d.athleteName) setAthleteName(d.athleteName);
           if(d.raceDate) setRaceDate(d.raceDate);
           if(d.startDate) setStartDate(d.startDate);
           const lp=(d.plan&&Object.keys(d.plan).length>0)?d.plan:buildDefaultPlan();
@@ -1355,8 +1359,8 @@ export default function App() {
     })();
   },[]);
 
-  const save=(np,nn,nr,ns)=>storeSet(SK,JSON.stringify({
-    name:nn??name,raceDate:nr??raceDate,startDate:ns??startDate,plan:np??plan
+  const save=(np,nn,nr,ns,na)=>storeSet(SK,JSON.stringify({
+    name:nn??name,athleteName:na??athleteName,raceDate:nr??raceDate,startDate:ns??startDate,plan:np??plan
   })).catch(()=>{});
   const updDay=(dk,u)=>{ const np={...plan,[dk]:{...plan[dk],...u}}; setPlan(np); save(np); };
   const openEdit=(dk)=>{ setEditKey(dk); setScreen("editday"); };
@@ -1389,12 +1393,13 @@ export default function App() {
       height:"100vh",color:C.muted,fontFamily:"system-ui",background:C.bg}}>Loading…</div>
   );
   if(screen==="setup") return (
-    <SetupScreen initName={name} initDate={raceDate} isEdit={!!name}
+    <SetupScreen initName={name} initAthlete={athleteName} isEdit={!!name}
       onBack={name?()=>setScreen("main"):null}
-      onSave={(n,d)=>{
-        const sd=todayStr(); setName(n); setRaceDate(d);
+      onSave={(athlete,n)=>{
+        const sd=todayStr(); setAthleteName(athlete); setName(n);
         const ns=startDate||sd; if(!startDate) setStartDate(ns);
-        save(plan,n,d,ns); setScreen("main");
+        const rd=raceDate||"2026-10-25"; if(!raceDate) setRaceDate(rd);  // race date is fixed
+        save(plan,n,rd,ns,athlete); setScreen("main");
       }}/>
   );
   if(screen==="editday"&&editKey) return (
@@ -1404,7 +1409,7 @@ export default function App() {
   );
   if(screen==="coach") return (
     <CoachScreen viewKey={offsetDate(dayOff)} plan={plan}
-      raceName={name} raceDate={raceDate} startDate={startDate}
+      athleteName={athleteName} raceName={name} raceDate={raceDate} startDate={startDate}
       onBack={()=>setScreen("main")}/>
   );
 

@@ -15,7 +15,7 @@ Guidelines:
 - If recent sessions felt hard (feeling 1–2 / "Dead legs", "Tough"), acknowledge the fatigue and adjust your advice. If they've been flying (4–5), encourage them without pushing recklessly.
 - Speak plain English. Be honest — don't sugarcoat a genuinely hard session — but always leave them feeling capable.
 - Never give medical advice. If they mention pain or injury, gently steer them toward rest and a professional.
-- Address the runner directly as "you". Don't start with "Here is..." or restate the question — just talk to them.`;
+- Address the runner directly as "you". If you're told their name, use their first name naturally now and then (e.g. to open or encourage) — never overdo it. Don't start with "Here is..." or restate the question — just talk to them.`;
 
 function fmtKm(n) {
   if (!n) return "0";
@@ -41,6 +41,7 @@ function buildContextBlock(ctx) {
   const lines = [];
   lines.push("Here is the runner's full training plan — everything completed so far and everything still to come. This is the same view of the plan the runner has in the app. Ground your advice in it; don't invent numbers you weren't given.");
   lines.push("");
+  if (ctx.athleteName) lines.push(`The runner's name is ${ctx.athleteName}.`);
   lines.push(`Race: ${ctx.raceName || "the marathon"} on ${ctx.raceDate || "race day"}.`);
   if (ctx.daysUntilRace != null) {
     lines.push(`Days until race: ${ctx.daysUntilRace}.`);
