@@ -410,6 +410,19 @@ function KmStepper({value,onAdjust,raw,setRaw,typing,setTyping,accent}) {
 }
 
 function EditDayScreen({dateKey:dk,entry,onSave,onBack}) {
+  const DEFAULT_KM = {
+    'Easy run': 8,
+    'Easy recovery run': 6,
+    'Long run': 20,
+    'Tempo run': 10,
+    'Track session – 6×800m': 11,
+    'Track session – 8×1km': 14,
+    'Sharpener – 5×1km': 10,
+    'Easy run with strides': 6,
+    'Easy jog with strides': 5,
+    'Easy jog': 4,
+    'Shake-out jog': 3,
+  };
   const initialKnown=!!entry.workout&&WORKOUT_OPTIONS.includes(entry.workout);
   const [workoutSel,setWorkoutSel]=useState(initialKnown?entry.workout:"Custom…");
   const [customWorkout,setCustomWorkout]=useState(initialKnown?"":(entry.workout||""));
@@ -424,6 +437,19 @@ function EditDayScreen({dateKey:dk,entry,onSave,onBack}) {
   const kmDoneNum=parseFloat(kmDone)||0;
   const stepKm=(delta)=>setKm(String(Math.max(0,parseFloat((kmNum+delta).toFixed(1)))));
   const stepKmDone=(delta)=>setKmDone(String(Math.max(0,parseFloat((kmDoneNum+delta).toFixed(1)))));
+  // Switching workout auto-fills its default distance — but only if the current
+  // km is still the previous workout's default (or empty), never a custom entry.
+  const onWorkoutChange=(e)=>{
+    const next=e.target.value;
+    if (next!=="Custom…"&&DEFAULT_KM[next]!=null) {
+      const prevDefault=DEFAULT_KM[workoutSel];
+      const cur=km.trim();
+      if (cur===""||(prevDefault!=null&&parseFloat(cur)===prevDefault)) {
+        setKm(String(DEFAULT_KM[next]));
+      }
+    }
+    setWorkoutSel(next);
+  };
   const d=new Date(dk+"T00:00:00");
   const lbl=d.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
   const inp2={width:"100%",border:`1px solid ${C.border}`,borderRadius:12,
@@ -447,7 +473,7 @@ function EditDayScreen({dateKey:dk,entry,onSave,onBack}) {
       <div style={{padding:20}}>
         <label style={{fontSize:12,textTransform:"uppercase",letterSpacing:".08em",
           color:C.muted,display:"block",marginBottom:8}}>Workout</label>
-        <select value={workoutSel} onChange={e=>setWorkoutSel(e.target.value)}
+        <select value={workoutSel} onChange={onWorkoutChange}
           style={{...inp2,WebkitAppearance:"menulist",appearance:"menulist",cursor:"pointer"}}>
           {WORKOUT_OPTIONS.map(o=>(<option key={o} value={o}>{o}</option>))}
           <option value="Custom…">Custom…</option>
@@ -515,8 +541,7 @@ function KmBig({value,color,size=42}) {
 }
 
 // ─── Today view ───────────────────────────────────────────────────────────────
-function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
-  const [dayOff,setDayOff]=useState(0);
+function TodayView({plan,updDay,onEdit,raceName,raceDate,dayOff,setDayOff}) {
   const viewKey=offsetDate(dayOff);
   const e=plan[viewKey]||{};
   const isToday=dayOff===0;
@@ -1011,7 +1036,7 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
 }
 
 // ─── Week view ────────────────────────────────────────────────────────────────
-function WeekView({today,plan,wkOff,setWkOff,onEdit}) {
+function WeekView({today,plan,wkOff,setWkOff,onGoToDay}) {
   const days=weekOf(wkOff);
   const fmt=dk=>new Date(dk+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});
   const wkTarget=days.reduce((s,dk)=>s+plannedKm(plan[dk]),0);
@@ -1044,7 +1069,7 @@ function WeekView({today,plan,wkOff,setWkOff,onEdit}) {
           const isT=dk===today;
           const hasKm=(e.km||0)>0;
           return (
-            <div key={dk} onClick={()=>onEdit(dk)} style={{
+            <div key={dk} onClick={()=>onGoToDay(dk)} style={{
               background:e.completed?C.doneLt:isT?C.sageLt:C.surface,
               border:`1.5px solid ${e.completed?C.done:isT?C.sage:C.border}`,
               borderRadius:12,padding:"13px 2px 11px",textAlign:"center",cursor:"pointer",
@@ -1071,7 +1096,7 @@ function WeekView({today,plan,wkOff,setWkOff,onEdit}) {
         const target=plannedKm(e);
         const ran=actualKm(e);
         return (
-          <div key={dk} onClick={()=>onEdit(dk)} style={{
+          <div key={dk} onClick={()=>onGoToDay(dk)} style={{
             background:e.completed?C.doneLt:C.surface,
             border:`1px solid ${e.completed?C.done:C.border}`,
             borderRadius:16,padding:"14px 18px",marginBottom:10,cursor:"pointer",
@@ -1120,7 +1145,7 @@ function WeekView({today,plan,wkOff,setWkOff,onEdit}) {
 }
 
 // ─── Month view ───────────────────────────────────────────────────────────────
-function MonthView({today,plan,moOff,setMoOff,onEdit}) {
+function MonthView({today,plan,moOff,setMoOff,onGoToDay}) {
   const now=new Date();
   const t=new Date(now.getFullYear(),now.getMonth()+moOff,1);
   const y=t.getFullYear(), m=t.getMonth();
@@ -1159,7 +1184,7 @@ function MonthView({today,plan,moOff,setMoOff,onEdit}) {
           const hasWorkout=!!e.workout?.trim();
           const isT=dk===today;
           return (
-            <div key={dk} onClick={()=>onEdit(dk)} style={{
+            <div key={dk} onClick={()=>onGoToDay(dk)} style={{
               aspectRatio:"1",borderRadius:10,display:"flex",flexDirection:"column",
               alignItems:"center",justifyContent:"center",gap:2,cursor:"pointer",
               background:e.completed?C.doneLt:hasWorkout?C.surface:"transparent",
@@ -1171,15 +1196,16 @@ function MonthView({today,plan,moOff,setMoOff,onEdit}) {
                 color:(hasWorkout||isT)?C.text:C.borderSt,lineHeight:1}}>
                 {new Date(dk+"T00:00:00").getDate()}
               </div>
-              {/* Running days show km; non-running sessions show a subtle sage dot. */}
+              {/* Running days show km; non-running sessions show their workout emoji. */}
               {hasKm
                 ? <div style={{fontSize:9,fontWeight:700,fontFamily:"monospace",lineHeight:1,
                     color:e.completed?C.done:C.warm}}>
                     {e.completed?`${fmtKm(actualKm(e))}k`:`${fmtKm(e.km)}k`}
                   </div>
                 : hasWorkout
-                  ? <div style={{width:6,height:6,borderRadius:"50%",
-                      background:e.completed?C.done:"rgba(139,158,138,0.5)"}}/>
+                  ? <div style={{fontSize:12,lineHeight:1,color:e.completed?C.done:undefined}}>
+                      {ALTS.find(a=>e.workout?.includes(a.label))?.emoji||"⚡"}
+                    </div>
                   : null}
             </div>
           );
@@ -1201,6 +1227,7 @@ export default function App() {
   const [editKey,setEditKey]=useState(null);
   const [wkOff,setWkOff]=useState(0);
   const [moOff,setMoOff]=useState(0);
+  const [dayOff,setDayOff]=useState(0);   // which day the Today view shows (offset from today)
 
   useEffect(()=>{
     (async()=>{
@@ -1235,6 +1262,8 @@ export default function App() {
   })).catch(()=>{});
   const updDay=(dk,u)=>{ const np={...plan,[dk]:{...plan[dk],...u}}; setPlan(np); save(np); };
   const openEdit=(dk)=>{ setEditKey(dk); setScreen("editday"); };
+  // Tapping a day in Week/Month jumps to that day in the Today view.
+  const goToDay=(dk)=>{ setDayOff(daysUntil(dk)??0); setView("today"); };
 
   const today=todayStr();
   const dLeft=daysUntil(raceDate);
@@ -1354,7 +1383,7 @@ export default function App() {
           <div style={{display:"flex",borderTop:`1px solid ${C.border}`,
             marginLeft:-20,marginRight:-20,paddingLeft:20,paddingRight:20}}>
             {["today","week","month"].map(v=>(
-              <button key={v} onClick={()=>setView(v)} style={{
+              <button key={v} onClick={()=>{ setView(v); if(v==="today") setDayOff(0); }} style={{
                 flex:1,padding:"13px 0",background:"none",border:"none",
                 borderBottom:`2.5px solid ${view===v?C.sage:"transparent"}`,
                 cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:600,
@@ -1368,9 +1397,9 @@ export default function App() {
       </div>
 
       <div style={{paddingBottom:32}}>
-        {view==="today"&&<TodayView plan={plan} updDay={updDay} onEdit={openEdit} raceName={name} raceDate={raceDate}/>}
-        {view==="week"&&<WeekView today={today} plan={plan} wkOff={wkOff} setWkOff={setWkOff} onEdit={openEdit}/>}
-        {view==="month"&&<MonthView today={today} plan={plan} moOff={moOff} setMoOff={setMoOff} onEdit={openEdit}/>}
+        {view==="today"&&<TodayView plan={plan} updDay={updDay} onEdit={openEdit} raceName={name} raceDate={raceDate} dayOff={dayOff} setDayOff={setDayOff}/>}
+        {view==="week"&&<WeekView today={today} plan={plan} wkOff={wkOff} setWkOff={setWkOff} onGoToDay={goToDay}/>}
+        {view==="month"&&<MonthView today={today} plan={plan} moOff={moOff} setMoOff={setMoOff} onGoToDay={goToDay}/>}
       </div>
     </div>
   );
