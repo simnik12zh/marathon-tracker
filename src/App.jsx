@@ -1156,26 +1156,31 @@ function MonthView({today,plan,moOff,setMoOff,onEdit}) {
           if (!dk) return <div key={`e${i}`}/>;
           const e=plan[dk]||{};
           const hasKm=(e.km||0)>0;
+          const hasWorkout=!!e.workout?.trim();
           const isT=dk===today;
           return (
             <div key={dk} onClick={()=>onEdit(dk)} style={{
               aspectRatio:"1",borderRadius:10,display:"flex",flexDirection:"column",
               alignItems:"center",justifyContent:"center",gap:2,cursor:"pointer",
-              background:e.completed?C.doneLt:hasKm?C.surface:"transparent",
-              border:`1.5px solid ${e.completed?C.done:isT?C.sage:hasKm?C.border:"transparent"}`,
+              background:e.completed?C.doneLt:hasWorkout?C.surface:"transparent",
+              border:`1.5px solid ${e.completed?C.done:isT?C.sage:hasWorkout?C.border:"transparent"}`,
               outline:isT?`2px solid ${C.sage}`:"none",outlineOffset:-1,
               WebkitTapHighlightColor:"transparent"}}>
               {/* Dim days with no planned session so workout days stand out. */}
-              <div style={{fontSize:13,fontWeight:(hasKm||isT)?600:400,
-                color:(hasKm||isT)?C.text:C.borderSt,lineHeight:1}}>
+              <div style={{fontSize:13,fontWeight:(hasWorkout||isT)?600:400,
+                color:(hasWorkout||isT)?C.text:C.borderSt,lineHeight:1}}>
                 {new Date(dk+"T00:00:00").getDate()}
               </div>
-              {hasKm&&(
-                <div style={{fontSize:9,fontWeight:700,fontFamily:"monospace",lineHeight:1,
-                  color:e.completed?C.done:C.warm}}>
-                  {e.completed?`${fmtKm(actualKm(e))}k`:`${fmtKm(e.km)}k`}
-                </div>
-              )}
+              {/* Running days show km; non-running sessions show a subtle sage dot. */}
+              {hasKm
+                ? <div style={{fontSize:9,fontWeight:700,fontFamily:"monospace",lineHeight:1,
+                    color:e.completed?C.done:C.warm}}>
+                    {e.completed?`${fmtKm(actualKm(e))}k`:`${fmtKm(e.km)}k`}
+                  </div>
+                : hasWorkout
+                  ? <div style={{width:6,height:6,borderRadius:"50%",
+                      background:e.completed?C.done:"rgba(139,158,138,0.5)"}}/>
+                  : null}
             </div>
           );
         })}
