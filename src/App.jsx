@@ -119,6 +119,11 @@ const TIPS = {
     color:"#7a8a9a", bg:"rgba(122,138,154,0.1)",
     text:"Yoga and Pilates complement marathon training well — they improve flexibility, core strength and joint mobility. A smart swap on any day when running feels like too much.",
   },
+  pilates: {
+    label:"🤸  Core & stability",
+    color:"#7a8a9a", bg:"rgba(122,138,154,0.1)",
+    text:"Pilates builds the core strength, posture and stability that runners rely on. Strengthening these deep muscles helps prevent injury and improves your running economy — a smart complement to your training on easier days.",
+  },
   walking: {
     label:"🚶  Easy movement",
     color:"#5a8a58", bg:"rgba(90,138,88,0.08)",
@@ -162,7 +167,8 @@ function getTip(workout) {
   if (w.includes("strides")) return TIPS.strides;
   if (w.includes("easy jog") || w.includes("jog")) return TIPS.easy_jog;
   if (w.includes("easy") || w.includes("first session")) return TIPS.easy;
-  if (w.includes("yoga") || w.includes("pilates")) return TIPS.yoga;
+  if (w.includes("yoga")) return TIPS.yoga;
+  if (w.includes("pilates")) return TIPS.pilates;
   if (w.includes("walking") || w.includes("hiking")) return TIPS.walking;
   if (w.includes("cycling") || w.includes("cycle")) return TIPS.cycling;
   if (w.includes("hiit")) return TIPS.hiit;
@@ -173,7 +179,8 @@ function getTip(workout) {
 
 const ALTS = [
   { emoji:"💥", label:"HIIT" },
-  { emoji:"🧘", label:"Yoga / Pilates" },
+  { emoji:"🧘", label:"Yoga" },
+  { emoji:"🤸", label:"Pilates" },
   { emoji:"🚶", label:"Walking" },
   { emoji:"🚴", label:"Cycling" },
   { emoji:"⋯", label:"Other" },
@@ -340,7 +347,6 @@ const WORKOUT_OPTIONS = [
   "Easy run","Easy recovery run","Long run","Tempo run",
   "Track session – 6×800m","Track session – 8×1km","Sharpener – 5×1km",
   "Easy run with strides","Easy jog with strides","Easy jog","Shake-out jog",
-  "💥 HIIT","🧘 Yoga / Pilates","🚶 Walking","🚴 Cycling","⋯ Other","🤒 Sick / Injured",
 ];
 
 // Shared km stepper (−/+0.5km) with a "tap to type exact" numeric input.
