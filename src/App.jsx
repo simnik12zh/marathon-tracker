@@ -281,28 +281,14 @@ function NavArrow({onClick,dir}) {
 }
 
 // ─── Tip card ─────────────────────────────────────────────────────────────────
-function TipCard({workout, compact=false}) {
+function TipCard({workout}) {
   const tip = getTip(workout);
   if (!tip) return null;
-  if (compact) {
-    return (
-      <span style={{
-        display:"inline-block",fontSize:10,fontWeight:700,
-        color:tip.color,background:tip.bg,
-        borderRadius:20,padding:"3px 9px",marginTop:5,
-      }}>{tip.label}</span>
-    );
-  }
   return (
     <div style={{
       marginTop:14,paddingTop:14,
       borderTop:`1px solid ${C.border}`,
     }}>
-      <span style={{
-        display:"inline-block",fontSize:11,fontWeight:700,
-        color:tip.color,background:tip.bg,
-        borderRadius:20,padding:"4px 11px",marginBottom:9,
-      }}>{tip.label}</span>
       <p style={{
         margin:0,fontSize:13,color:C.muted,
         lineHeight:1.6,letterSpacing:"0.01em",
@@ -881,12 +867,22 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay}) {
   const fmt=dk=>new Date(dk+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});
   const wkTarget=days.reduce((s,dk)=>s+plannedKm(plan[dk]),0);
   const wkDone=days.reduce((s,dk)=>s+actualKm(plan[dk]),0);
-  const swipe=useSwipe(()=>setWkOff(w=>w+1),()=>setWkOff(w=>w-1));
+  const [direction,setDirection]=useState(null);   // 'left' | 'right' — week-slide direction
+  const [animating,setAnimating]=useState(false);
+  const navWeek=(delta)=>{
+    // Next week → content enters from the right (slideInLeft); previous → from the left (slideInRight).
+    setDirection(delta>0?'left':'right');
+    setWkOff(w=>w+delta);
+    setAnimating(true);
+    setTimeout(()=>setAnimating(false),250);
+  };
+  const swipe=useSwipe(()=>navWeek(1),()=>navWeek(-1));
 
   return (
     <div {...swipe} style={{padding:"16px 16px 0"}}>
+      <style>{"@keyframes slideInLeft{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes slideInRight{from{transform:translateX(-100%);opacity:0}to{transform:translateX(0);opacity:1}}"}</style>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-        <NavArrow onClick={()=>setWkOff(w=>w-1)} dir="left"/>
+        <NavArrow onClick={()=>navWeek(-1)} dir="left"/>
         <div style={{flex:1,textAlign:"center"}}>
           <div style={{fontSize:13,color:C.muted}}>{fmt(days[0])} – {fmt(days[6])}</div>
           {wkTarget>0&&(
@@ -900,9 +896,12 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay}) {
             border:"none",borderRadius:20,padding:"4px 12px",cursor:"pointer",
             marginTop:4,WebkitTapHighlightColor:"transparent"}}>↩ Today</button>}
         </div>
-        <NavArrow onClick={()=>setWkOff(w=>w+1)} dir="right"/>
+        <NavArrow onClick={()=>navWeek(1)} dir="right"/>
       </div>
 
+      {/* Animated content — strip + day list slide on week change; nav row stays fixed. */}
+      <div style={{overflow:"hidden"}}>
+      <div key={wkOff} style={{animation:animating?`${direction==="left"?"slideInLeft":"slideInRight"} 220ms ease-out`:undefined}}>
       {/* Strip */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:5,marginBottom:16}}>
         {days.map((dk,i)=>{
@@ -955,8 +954,6 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay}) {
                   whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                   {e.workout?.trim()||"Rest"}
                 </div>
-                {/* Compact tip pill */}
-                {e.workout?.trim()&&<TipCard workout={e.workout} compact/>}
               </div>
               {target>0&&(
                 <div style={{textAlign:"right",flexShrink:0,marginLeft:8}}>
@@ -981,6 +978,8 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay}) {
           </div>
         );
       })}
+      </div>{/* /week-slide */}
+      </div>{/* /overflow */}
     </div>
   );
 }
@@ -993,12 +992,22 @@ function MonthView({today,plan,moOff,setMoOff,onGoToDay}) {
   const days=monthGrid(y,m);
   const mTarget=days.filter(Boolean).reduce((s,dk)=>s+plannedKm(plan[dk]),0);
   const mDone=days.filter(Boolean).reduce((s,dk)=>s+actualKm(plan[dk]),0);
-  const swipe=useSwipe(()=>setMoOff(m=>m+1),()=>setMoOff(m=>m-1));
+  const [direction,setDirection]=useState(null);   // 'left' | 'right' — month-slide direction
+  const [animating,setAnimating]=useState(false);
+  const navMonth=(delta)=>{
+    // Next month → content enters from the right (slideInLeft); previous → from the left (slideInRight).
+    setDirection(delta>0?'left':'right');
+    setMoOff(o=>o+delta);
+    setAnimating(true);
+    setTimeout(()=>setAnimating(false),250);
+  };
+  const swipe=useSwipe(()=>navMonth(1),()=>navMonth(-1));
 
   return (
     <div {...swipe} style={{padding:"16px 16px 0"}}>
+      <style>{"@keyframes slideInLeft{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes slideInRight{from{transform:translateX(-100%);opacity:0}to{transform:translateX(0);opacity:1}}"}</style>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
-        <NavArrow onClick={()=>setMoOff(m=>m-1)} dir="left"/>
+        <NavArrow onClick={()=>navMonth(-1)} dir="left"/>
         <div style={{flex:1,textAlign:"center"}}>
           <div style={{fontSize:18,fontWeight:700,color:C.text}}>{MONTHS[m]} {y}</div>
           {mTarget>0&&(
@@ -1012,8 +1021,11 @@ function MonthView({today,plan,moOff,setMoOff,onGoToDay}) {
             border:"none",borderRadius:20,padding:"4px 12px",cursor:"pointer",
             marginTop:4,WebkitTapHighlightColor:"transparent"}}>↩ Today</button>}
         </div>
-        <NavArrow onClick={()=>setMoOff(m=>m+1)} dir="right"/>
+        <NavArrow onClick={()=>navMonth(1)} dir="right"/>
       </div>
+      {/* Animated content — calendar grid slides on month change; nav row stays fixed. */}
+      <div style={{overflow:"hidden"}}>
+      <div key={moOff} style={{animation:animating?`${direction==="left"?"slideInLeft":"slideInRight"} 220ms ease-out`:undefined}}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
         {DL.map((l,i)=>(
           <div key={i} style={{fontSize:10,textTransform:"uppercase",letterSpacing:".04em",
@@ -1053,6 +1065,8 @@ function MonthView({today,plan,moOff,setMoOff,onGoToDay}) {
           );
         })}
       </div>
+      </div>{/* /month-slide */}
+      </div>{/* /overflow */}
     </div>
   );
 }
