@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const SK = "marathon-v8";
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -541,6 +541,21 @@ function KmBig({value,color,size=42}) {
 }
 
 // ─── Today view ───────────────────────────────────────────────────────────────
+// Horizontal swipe gesture: swipe left → onLeft (next), swipe right → onRight
+// (previous). 50px threshold so vertical scrolls don't trigger it.
+function useSwipe(onLeft, onRight) {
+  const touchStartX = useRef(null);
+  return {
+    onTouchStart: (e) => { touchStartX.current = e.touches[0].clientX; },
+    onTouchEnd: (e) => {
+      if (touchStartX.current === null) return;
+      const delta = e.changedTouches[0].clientX - touchStartX.current;
+      if (Math.abs(delta) > 50) (delta < 0 ? onLeft : onRight)();
+      touchStartX.current = null;
+    },
+  };
+}
+
 function TodayView({plan,updDay,onEdit,raceName,raceDate,dayOff,setDayOff}) {
   const viewKey=offsetDate(dayOff);
   const e=plan[viewKey]||{};
@@ -566,6 +581,7 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate,dayOff,setDayOff}) {
   const persistCoach=(msgs)=>{ try { localStorage.setItem(coachKey,JSON.stringify(msgs)); } catch {} };
 
   const navDay=(delta)=>{ setDayOff(o=>o+delta); setEditingKm(false); setSheetOpen(false); };
+  const swipe=useSwipe(()=>navDay(1),()=>navDay(-1));
   const completeRun=()=>updDay(viewKey,{completed:true,kmDone:e.km||0});
   const adjustKm=(delta)=>{
     const next=Math.max(0,parseFloat((ran+delta).toFixed(1)));
@@ -674,17 +690,20 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate,dayOff,setDayOff}) {
     textAlign:"left",WebkitTapHighlightColor:"transparent"};
 
   return (
-    <div style={{padding:"16px 16px 0"}}>
+    <div {...swipe} style={{padding:"16px 16px 0"}}>
       <style>{"@keyframes checkPop{0%{transform:scale(1)}50%{transform:scale(1.15)}100%{transform:scale(1)}}"}</style>
       {/* Stats */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
         {[
           {
-            // Planned km in normal colour until the run is logged; actual km in green once done.
+            // Running: planned km (green once done). Non-running: the workout emoji.
+            // Genuinely empty day: "Rest".
             node: hasKm
               ? <span style={{color:e.completed?C.done:C.text}}>{fmtKm(e.completed?ran:target)} km</span>
-              : "Rest",
-            lbl: hasKm&&!e.completed ? "planned" : (isToday?"Today":d.toLocaleDateString("en-US",{weekday:"short"})),
+              : e.workout?.trim()
+                ? (ALTS.find(a=>e.workout.includes(a.label))?.emoji ?? '⚡')
+                : 'Rest',
+            lbl: e.workout?.trim()&&!e.completed ? "planned" : (isToday?"Today":d.toLocaleDateString("en-US",{weekday:"short"})),
           },
           {
             // Green only counts km actually run; the planned total stays neutral.
@@ -743,7 +762,8 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate,dayOff,setDayOff}) {
               {e.workout?.trim()||"Rest day"}
             </div>
           </div>
-          {e.completed
+          {/* No circle on genuine rest days — nothing to log. */}
+          {e.workout?.trim()&&(e.completed
             ? <div style={{display:"flex",flexDirection:"column",alignItems:"center",
                 gap:5,flexShrink:0}}>
                 <button onClick={()=>updDay(viewKey,{completed:false,kmDone:null})}
@@ -764,10 +784,10 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate,dayOff,setDayOff}) {
                     border:`2.5px solid ${C.sage}`,background:C.sageLt,
                     cursor:"pointer",
                     WebkitTapHighlightColor:"transparent"}}/>
-                <span style={{fontSize:10,fontWeight:700,color:C.sageDk,
-                  textTransform:"uppercase",letterSpacing:".05em"}}>Tap to log</span>
+                {hasKm&&<span style={{fontSize:10,fontWeight:700,color:C.sageDk,
+                  textTransform:"uppercase",letterSpacing:".05em"}}>Tap to log</span>}
               </div>
-          }
+          )}
           <button onClick={()=>setSheetOpen(true)} aria-label="More options"
             style={{width:44,height:44,borderRadius:"50%",border:"none",
               background:"transparent",color:C.muted,fontSize:24,lineHeight:1,
@@ -1041,9 +1061,10 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay}) {
   const fmt=dk=>new Date(dk+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});
   const wkTarget=days.reduce((s,dk)=>s+plannedKm(plan[dk]),0);
   const wkDone=days.reduce((s,dk)=>s+actualKm(plan[dk]),0);
+  const swipe=useSwipe(()=>setWkOff(w=>w+1),()=>setWkOff(w=>w-1));
 
   return (
-    <div style={{padding:"16px 16px 0"}}>
+    <div {...swipe} style={{padding:"16px 16px 0"}}>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
         <NavArrow onClick={()=>setWkOff(w=>w-1)} dir="left"/>
         <div style={{flex:1,textAlign:"center"}}>
@@ -1152,9 +1173,10 @@ function MonthView({today,plan,moOff,setMoOff,onGoToDay}) {
   const days=monthGrid(y,m);
   const mTarget=days.filter(Boolean).reduce((s,dk)=>s+plannedKm(plan[dk]),0);
   const mDone=days.filter(Boolean).reduce((s,dk)=>s+actualKm(plan[dk]),0);
+  const swipe=useSwipe(()=>setMoOff(m=>m+1),()=>setMoOff(m=>m-1));
 
   return (
-    <div style={{padding:"16px 16px 0"}}>
+    <div {...swipe} style={{padding:"16px 16px 0"}}>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
         <NavArrow onClick={()=>setMoOff(m=>m-1)} dir="left"/>
         <div style={{flex:1,textAlign:"center"}}>
