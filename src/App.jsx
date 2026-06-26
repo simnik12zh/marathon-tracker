@@ -476,6 +476,18 @@ function EditDayScreen({dateKey:dk,entry,onSave,onBack}) {
   );
 }
 
+// Big monospace km value with the decimal rendered smaller (28px) so the
+// fixed-width gap around the dot reads as intentional rather than broken.
+function KmBig({value,color}) {
+  const [intPart,decPart]=fmtKm(value).split(".");
+  return (
+    <span style={{fontFamily:"monospace",fontWeight:700,color,lineHeight:1,whiteSpace:"nowrap"}}>
+      <span style={{fontSize:42}}>{intPart}</span>
+      {decPart!=null&&<span style={{fontSize:28}}>.{decPart}</span>}
+    </span>
+  );
+}
+
 // ─── Today view ───────────────────────────────────────────────────────────────
 function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
   const [dayOff,setDayOff]=useState(0);
@@ -484,6 +496,7 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
   const isToday=dayOff===0;
   const [editingKm,setEditingKm]=useState(false);
   const [kmInput,setKmInput]=useState("");
+  const [sheetOpen,setSheetOpen]=useState(false);   // ⋯ edit-actions bottom sheet
 
   // ── AI coach chat state ─────────────────────────────────────────────────────
   const [coachOpen,setCoachOpen]=useState(false);
@@ -501,7 +514,7 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
   },[viewKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const persistCoach=(msgs)=>{ try { localStorage.setItem(coachKey,JSON.stringify(msgs)); } catch {} };
 
-  const navDay=(delta)=>{ setDayOff(o=>o+delta); setEditingKm(false); };
+  const navDay=(delta)=>{ setDayOff(o=>o+delta); setEditingKm(false); setSheetOpen(false); };
   const completeRun=()=>updDay(viewKey,{completed:true,kmDone:e.km||0});
   const adjustKm=(delta)=>{
     const next=Math.max(0,parseFloat((ran+delta).toFixed(1)));
@@ -603,8 +616,15 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
     try { localStorage.removeItem(coachKey); } catch {}
   };
 
+  // Shared style for the bottom-sheet action rows.
+  const sheetRow={display:"flex",alignItems:"center",gap:6,width:"100%",
+    background:"none",border:"none",borderRadius:12,padding:"14px 10px",
+    fontFamily:"inherit",fontSize:16,fontWeight:500,color:C.text,cursor:"pointer",
+    textAlign:"left",WebkitTapHighlightColor:"transparent"};
+
   return (
     <div style={{padding:"16px 16px 0"}}>
+      <style>{"@keyframes checkPop{0%{transform:scale(1)}50%{transform:scale(1.15)}100%{transform:scale(1)}}"}</style>
       {/* Stats */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
         {[
@@ -657,16 +677,23 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
           </div>
           {e.completed
             ? <button onClick={()=>updDay(viewKey,{completed:false,kmDone:null})}
-                style={{width:52,height:52,borderRadius:"50%",border:"none",
+                style={{width:64,height:64,borderRadius:"50%",border:"none",
                   background:C.done,cursor:"pointer",display:"flex",
                   alignItems:"center",justifyContent:"center",flexShrink:0,
-                  WebkitTapHighlightColor:"transparent"}}><Chk size={18}/></button>
+                  animation:"checkPop .35s ease-out",
+                  WebkitTapHighlightColor:"transparent"}}><Chk size={22}/></button>
             : <button onClick={hasKm?completeRun:()=>updDay(viewKey,{completed:true})}
-                style={{width:52,height:52,borderRadius:"50%",
-                  border:`2px solid ${C.borderSt}`,background:"transparent",
+                style={{width:64,height:64,borderRadius:"50%",
+                  border:`2.5px solid ${C.borderSt}`,background:"transparent",
                   cursor:"pointer",flexShrink:0,
                   WebkitTapHighlightColor:"transparent"}}/>
           }
+          <button onClick={()=>setSheetOpen(true)} aria-label="More options"
+            style={{width:36,height:36,borderRadius:"50%",border:"none",
+              background:"transparent",color:C.muted,fontSize:24,lineHeight:1,
+              cursor:"pointer",display:"flex",alignItems:"center",
+              justifyContent:"center",flexShrink:0,marginTop:8,
+              WebkitTapHighlightColor:"transparent"}}>⋯</button>
         </div>
 
         {/* ── Tip ── */}
@@ -703,8 +730,7 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
                       alignItems:"center",justifyContent:"center",flexShrink:0,
                       WebkitTapHighlightColor:"transparent"}}>−</button>
                     <div onClick={openKmEdit} style={{flex:1,textAlign:"center",cursor:"pointer"}}>
-                      <span style={{fontSize:42,fontWeight:700,color:C.done,
-                        fontFamily:"monospace",lineHeight:1}}>{fmtKm(ran)}</span>
+                      <KmBig value={ran} color={C.done}/>
                       <span style={{fontSize:20,color:C.done,fontWeight:500}}> km</span>
                       <div style={{fontSize:11,color:C.subtle,marginTop:3}}>
                         {ran!==target?`${fmtKm(target)} planned · `:""}tap to edit
@@ -717,8 +743,7 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
                       WebkitTapHighlightColor:"transparent"}}>+</button>
                   </div>
               : <div style={{display:"flex",alignItems:"baseline",gap:10}}>
-                  <span style={{fontSize:42,fontWeight:700,color:C.sage,
-                    fontFamily:"monospace",lineHeight:1}}>{fmtKm(target)}</span>
+                  <KmBig value={target} color={C.sage}/>
                   <span style={{fontSize:20,color:C.sage,fontWeight:500}}>km</span>
                 </div>
             }
@@ -768,51 +793,11 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
             color:C.text,background:e.completed?"rgba(255,255,255,.5)":C.bg,
             resize:"none",outline:"none",lineHeight:1.5,boxSizing:"border-box"}}/>
 
-        {/* Alternative workouts — always visible when not completed */}
-        {!e.completed&&(
-          <div style={{marginTop:14}}>
-            <div style={{fontSize:11,color:C.muted,marginBottom:8,
-              textTransform:"uppercase",letterSpacing:".06em"}}>
-              {e.workout?.trim()?"Change workout:":"Add a workout:"}
-            </div>
-            <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
-              {ALTS.filter(a=>!e.workout?.includes(a.label)).map(a=>(
-                <button key={a.label}
-                  onClick={()=>updDay(viewKey,{workout:`${a.emoji} ${a.label}`,km:null,kmDone:null,completed:false})}
-                  style={{fontSize:13,color:C.text,background:C.bg,
-                    border:`1px solid ${C.border}`,borderRadius:20,
-                    padding:"8px 14px",cursor:"pointer",fontFamily:"inherit",
-                    WebkitTapHighlightColor:"transparent"}}>
-                  {a.emoji} {a.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+      </div>
 
-        {/* Bottom actions */}
-        <div style={{display:"flex",gap:8,marginTop:14}}>
-          {e.workout?.trim()&&(
-            <button
-              onClick={()=>updDay(viewKey,{workout:'',km:null,kmDone:null,completed:false})}
-              style={{fontSize:13,color:"#c05050",background:"rgba(192,80,80,0.08)",
-                border:"none",borderRadius:10,padding:"10px 14px",cursor:"pointer",
-                fontFamily:"inherit",WebkitTapHighlightColor:"transparent"}}>
-              🗑 Remove
-            </button>
-          )}
-          <button onClick={()=>onEdit(viewKey)} style={{fontSize:13,
-            color:C.sageDk,background:C.sageLt,border:"none",borderRadius:10,
-            padding:"10px 14px",cursor:"pointer",fontFamily:"inherit",
-            WebkitTapHighlightColor:"transparent"}}>
-            ✏ Add / change run
-          </button>
-        </div>
-
-        {/* AI coach */}
-        {e.workout?.trim()&&(
-          <div style={{marginTop:14,paddingTop:14,
-            borderTop:`1px solid ${e.completed?"rgba(114,173,106,.2)":C.border}`}}>
+      {/* AI coach — standalone section below the card */}
+      {e.workout?.trim()&&(
+        <div style={{marginTop:16}}>
             {!coachOpen
               ? <button onClick={()=>setCoachOpen(true)} style={{width:"100%",padding:"13px",
                   background:C.sage,color:"#fff",border:"none",borderRadius:12,
@@ -916,7 +901,49 @@ function TodayView({plan,updDay,onEdit,raceName,raceDate}) {
             }
           </div>
         )}
-      </div>
+
+      {/* ⋯ Edit-actions bottom sheet */}
+      {sheetOpen&&(
+        <>
+          <div onClick={()=>setSheetOpen(false)}
+            style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:50,
+              WebkitTapHighlightColor:"transparent"}}/>
+          <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:51,
+            maxWidth:480,margin:"0 auto",background:C.surface,
+            borderRadius:"20px 20px 0 0",boxShadow:"0 -8px 30px rgba(0,0,0,0.18)",
+            padding:"8px 16px calc(20px + env(safe-area-inset-bottom))",
+            animation:"sheetUp .25s ease-out"}}>
+            <style>{"@keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}"}</style>
+            <div style={{width:36,height:4,borderRadius:2,background:C.border,
+              margin:"6px auto 14px"}}/>
+
+            <button onClick={()=>{setSheetOpen(false);onEdit(viewKey);}} style={sheetRow}>
+              ✏  Add / change run
+            </button>
+            {e.workout?.trim()&&(
+              <button onClick={()=>{setSheetOpen(false);updDay(viewKey,{workout:'',km:null,kmDone:null,completed:false});}}
+                style={{...sheetRow,color:"#c05050"}}>
+                🗑  Remove workout
+              </button>
+            )}
+
+            <div style={{fontSize:11,color:C.muted,margin:"16px 4px 10px",
+              textTransform:"uppercase",letterSpacing:".06em"}}>Switch to</div>
+            <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+              {ALTS.filter(a=>!e.workout?.includes(a.label)).map(a=>(
+                <button key={a.label}
+                  onClick={()=>{setSheetOpen(false);updDay(viewKey,{workout:`${a.emoji} ${a.label}`,km:null,kmDone:null,completed:false});}}
+                  style={{fontSize:14,color:C.text,background:C.bg,
+                    border:`1px solid ${C.border}`,borderRadius:20,
+                    padding:"9px 15px",cursor:"pointer",fontFamily:"inherit",
+                    WebkitTapHighlightColor:"transparent"}}>
+                  {a.emoji} {a.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
