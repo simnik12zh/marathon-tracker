@@ -438,7 +438,7 @@ function KmStepper({value,onAdjust,raw,setRaw,typing,setTyping,accent}) {
   );
 }
 
-function EditDayScreen({dateKey:dk,entry,onSave,onBack}) {
+function EditDayScreen({dateKey:dk,entry,isRun,onSave,onBack}) {
   const DEFAULT_KM = {
     'Easy run': 8,
     'Easy recovery run': 6,
@@ -457,15 +457,9 @@ function EditDayScreen({dateKey:dk,entry,onSave,onBack}) {
   const [customWorkout,setCustomWorkout]=useState(initialKnown?"":(entry.workout||""));
   const [km,setKm]=useState(entry.km!=null?String(entry.km):"");
   const [kmTyping,setKmTyping]=useState(false);
-  const [kmDone,setKmDone]=useState(entry.kmDone!=null?String(entry.kmDone):"");
-  const [kmDoneTyping,setKmDoneTyping]=useState(false);
-  const [completed,setCompleted]=useState(!!entry.completed);
-  const [notes,setNotes]=useState(entry.notes||"");
   const workout=workoutSel==="Custom…"?customWorkout:workoutSel;
   const kmNum=parseFloat(km)||0;
-  const kmDoneNum=parseFloat(kmDone)||0;
   const stepKm=(delta)=>setKm(String(Math.max(0,parseFloat((kmNum+delta).toFixed(1)))));
-  const stepKmDone=(delta)=>setKmDone(String(Math.max(0,parseFloat((kmDoneNum+delta).toFixed(1)))));
   // Switching workout auto-fills its default distance — but only if the current
   // km is still the previous workout's default (or empty), never a custom entry.
   const onWorkoutChange=(e)=>{
@@ -501,7 +495,7 @@ function EditDayScreen({dateKey:dk,entry,onSave,onBack}) {
       </div>
       <div style={{padding:20}}>
         <label style={{fontSize:12,textTransform:"uppercase",letterSpacing:".08em",
-          color:C.muted,display:"block",marginBottom:8}}>Workout</label>
+          color:C.muted,display:"block",marginBottom:8}}>{isRun?"Run type":"Workout"}</label>
         <select value={workoutSel} onChange={onWorkoutChange}
           style={{...inp2,WebkitAppearance:"menulist",appearance:"menulist",cursor:"pointer"}}>
           {WORKOUT_OPTIONS.map(o=>(<option key={o} value={o}>{o}</option>))}
@@ -517,37 +511,13 @@ function EditDayScreen({dateKey:dk,entry,onSave,onBack}) {
         <KmStepper value={kmNum} onAdjust={stepKm} raw={km} setRaw={setKm}
           typing={kmTyping} setTyping={setKmTyping} accent={C.sage}/>
 
-        {entry.completed&&<>
-          <label style={{fontSize:12,textTransform:"uppercase",letterSpacing:".08em",
-            color:C.muted,display:"block",marginBottom:10,marginTop:20}}>Actual km ran</label>
-          <KmStepper value={kmDoneNum} onAdjust={stepKmDone} raw={kmDone} setRaw={setKmDone}
-            typing={kmDoneTyping} setTyping={setKmDoneTyping} accent={C.done}/>
-        </>}
-
-        <label style={{fontSize:12,textTransform:"uppercase",letterSpacing:".08em",
-          color:C.muted,display:"block",marginBottom:8,marginTop:20}}>Notes</label>
-        <textarea style={{...inp2,resize:"none",lineHeight:1.6}} rows={3}
-          placeholder="How it went · conditions · how you felt…"
-          value={notes} onChange={e=>setNotes(e.target.value)}/>
-
-        <div style={{display:"flex",alignItems:"center",gap:14,marginTop:12,padding:"8px 0",cursor:"pointer"}}
-          onClick={()=>setCompleted(c=>!c)}>
-          <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,
-            border:completed?"none":`2px solid ${C.borderSt}`,
-            background:completed?C.done:"transparent",
-            display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>
-            {completed&&<Chk size={15}/>}
-          </div>
-          <span style={{fontSize:16,color:C.text}}>Mark as completed</span>
-        </div>
-
         <div style={{display:"flex",gap:12,marginTop:28}}>
           <button onClick={onBack} style={{padding:"15px 20px",background:C.surface,
             border:`1px solid ${C.border}`,borderRadius:14,fontFamily:"inherit",
             fontSize:15,cursor:"pointer",color:C.muted,
             WebkitTapHighlightColor:"transparent"}}>Cancel</button>
           <button onClick={()=>onSave({workout,km:parseFloat(km)||null,
-            kmDone:parseFloat(kmDone)||null,completed,notes})}
+            kmDone:entry.kmDone??null,completed:!!entry.completed,notes:entry.notes??''})}
             style={{flex:1,padding:15,background:C.sage,color:"#fff",border:"none",
               borderRadius:14,fontFamily:"inherit",fontSize:16,fontWeight:600,
               cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>Save</button>
@@ -591,9 +561,13 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
   const isToday=dayOff===0;
   const [editingKm,setEditingKm]=useState(false);
   const [kmInput,setKmInput]=useState("");
-  const [sheetOpen,setSheetOpen]=useState(false);   // ⋯ edit-actions bottom sheet
+  const [sheetOpen,setSheetOpen]=useState(false);   // swap-arrows change-workout sheet
+  const [otherMode,setOtherMode]=useState(false);   // "Other" free-text prompt in the sheet
+  const [otherText,setOtherText]=useState("");
   const [direction,setDirection]=useState(null);    // 'left' | 'right' — day-slide direction
   const [animating,setAnimating]=useState(false);   // day-change slide in progress
+  const [notesOpen,setNotesOpen]=useState(false);   // notes textarea expanded for editing
+  useEffect(()=>{ setNotesOpen(false); },[viewKey]); // collapse the notes editor on day change
 
   const navDay=(delta)=>{
     setEditingKm(false); setSheetOpen(false);
@@ -634,9 +608,24 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
 
   // ⋯ sheet option handler: Run opens the editor, Rest clears the day,
   // everything else sets the workout to "<emoji> <label>".
+  const closeSheet=()=>{ setSheetOpen(false); setOtherMode(false); setOtherText(""); };
+  const confirmOther=()=>{
+    const t=otherText.trim();
+    if (!t) return;
+    updDay(viewKey,{workout:`⋯ ${t}`,km:null,kmDone:null,completed:false});
+    closeSheet();
+  };
   const onSheetOption=(opt)=>{
+    if (opt.action==="other") { setOtherMode(true); return; }   // ask what they're doing
     setSheetOpen(false);
-    if (opt.action==="run") { onEdit(viewKey); return; }
+    if (opt.action==="run") {
+      // From a non-running session (matches an ALTS label, or has no km) open the
+      // editor with a clean Easy-run default; an existing run is edited as-is.
+      const w=(e.workout||"").toLowerCase();
+      const isNonRunning=ALTS.some(a=>w.includes(a.label.toLowerCase()))||!(e.km>0);
+      onEdit(viewKey, isNonRunning?{workout:'Easy run',km:8,kmDone:null,completed:false,notes:''}:undefined, true);
+      return;
+    }
     if (opt.action==="rest") { updDay(viewKey,{workout:'',km:null,kmDone:null,completed:false}); return; }
     updDay(viewKey,{workout:`${opt.emoji} ${opt.label}`,km:null,kmDone:null,completed:false});
   };
@@ -735,12 +724,16 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
                 <span style={{fontSize:11,fontWeight:700,color:C.borderSt,letterSpacing:'.08em'}}>LOG</span>
               </button>
           )}
-          <button onClick={()=>setSheetOpen(true)} aria-label="More options"
-            style={{width:44,height:44,borderRadius:"50%",border:"none",
-              background:"transparent",color:C.muted,fontSize:24,lineHeight:1,
-              cursor:"pointer",display:"flex",alignItems:"center",
-              justifyContent:"center",flexShrink:0,marginTop:10,
-              WebkitTapHighlightColor:"transparent"}}>⋯</button>
+          <button onClick={()=>setSheetOpen(true)} aria-label="Change workout"
+            style={{width:44,height:44,border:"none",background:"transparent",color:C.muted,
+              cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
+              flexShrink:0,marginTop:10,WebkitTapHighlightColor:"transparent"}}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 16V4m0 0L3 8m4-4l4 4"/>
+              <path d="M17 8v12m0 0l4-4m-4 4l-4-4"/>
+            </svg>
+          </button>
         </div>
 
         {/* ── Tip ── */}
@@ -833,13 +826,29 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
           </div>
         )}
 
-        {/* Notes */}
-        <textarea rows={2} placeholder="Notes — how it felt, conditions…"
-          value={e.notes||""} onChange={ev=>updDay(viewKey,{notes:ev.target.value})}
-          style={{width:"100%",marginTop:14,border:`1px solid ${C.border}`,
-            borderRadius:12,padding:"11px 14px",fontFamily:"inherit",fontSize:15,
-            color:C.text,background:e.completed?"rgba(255,255,255,.5)":C.bg,
-            resize:"none",outline:"none",lineHeight:1.5,boxSizing:"border-box"}}/>
+        {/* Notes — collapsible */}
+        {notesOpen ? (
+          <textarea rows={2} autoFocus placeholder="Notes — how it felt, conditions…"
+            value={e.notes||""} onChange={ev=>updDay(viewKey,{notes:ev.target.value})}
+            onBlur={()=>setNotesOpen(false)}
+            style={{width:"100%",marginTop:14,border:`1px solid ${C.border}`,
+              borderRadius:12,padding:"11px 14px",fontFamily:"inherit",fontSize:15,
+              color:C.text,background:e.completed?"rgba(255,255,255,.5)":C.bg,
+              resize:"none",outline:"none",lineHeight:1.5,boxSizing:"border-box"}}/>
+        ) : (e.notes||"").trim() ? (
+          <div onClick={()=>setNotesOpen(true)}
+            style={{display:"flex",alignItems:"flex-start",gap:8,marginTop:14,cursor:"pointer",
+              WebkitTapHighlightColor:"transparent"}}>
+            <p style={{margin:0,flex:1,fontSize:14,color:C.text,lineHeight:1.55,
+              whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{e.notes}</p>
+            <span style={{fontSize:13,color:C.muted,flexShrink:0,lineHeight:1.55}}>✏️</span>
+          </div>
+        ) : (
+          <button onClick={()=>setNotesOpen(true)}
+            style={{marginTop:14,background:"none",border:"none",cursor:"pointer",
+              color:C.muted,fontSize:13,fontWeight:500,padding:"4px 0",
+              WebkitTapHighlightColor:"transparent"}}>📝 Add note</button>
+        )}
 
       </div>
       </div>{/* /key wrapper */}
@@ -859,7 +868,7 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
       {/* ⋯ Edit-actions bottom sheet */}
       {sheetOpen&&(
         <>
-          <div onClick={()=>setSheetOpen(false)}
+          <div onClick={closeSheet}
             style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:50,
               WebkitTapHighlightColor:"transparent"}}/>
           <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:51,
@@ -869,27 +878,50 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
             animation:"sheetUp .25s ease-out"}}>
             <style>{"@keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}"}</style>
             {/* Tappable grab handle — tap (or tap outside) to dismiss. */}
-            <button onClick={()=>setSheetOpen(false)} aria-label="Close"
+            <button onClick={closeSheet} aria-label="Close"
               style={{display:"block",width:"100%",background:"none",border:"none",
                 cursor:"pointer",padding:"6px 0 14px",WebkitTapHighlightColor:"transparent"}}>
               <div style={{width:40,height:5,borderRadius:3,background:C.borderSt,margin:"0 auto"}}/>
             </button>
 
-            <div style={{fontSize:16,fontWeight:600,color:C.text,margin:"4px 4px 16px"}}>
-              What are you doing today?
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
-              {SHEET_OPTIONS.map(opt=>(
-                <button key={opt.action} onClick={()=>onSheetOption(opt)}
-                  style={{display:"flex",flexDirection:"column",alignItems:"center",
-                    justifyContent:"center",gap:5,minHeight:64,padding:"12px 4px",
-                    background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,
-                    cursor:"pointer",fontFamily:"inherit",WebkitTapHighlightColor:"transparent"}}>
-                  <span style={{fontSize:24,lineHeight:1}}>{opt.emoji}</span>
-                  <span style={{fontSize:11,color:C.muted,textAlign:"center",lineHeight:1.15}}>{opt.label}</span>
-                </button>
-              ))}
-            </div>
+            {otherMode ? (
+              <>
+                <div style={{fontSize:16,fontWeight:600,color:C.text,margin:"4px 4px 16px"}}>
+                  What are you doing?
+                </div>
+                <div style={{display:"flex",gap:10}}>
+                  <input autoFocus value={otherText} onChange={ev=>setOtherText(ev.target.value)}
+                    onKeyDown={ev=>{ if(ev.key==="Enter") confirmOther(); }}
+                    placeholder="e.g. Hike, Swimming, Football"
+                    style={{flex:1,border:`1px solid ${C.border}`,borderRadius:12,
+                      padding:"13px 15px",fontFamily:"inherit",fontSize:16,color:C.text,
+                      background:C.bg,outline:"none",boxSizing:"border-box",WebkitAppearance:"none"}}/>
+                  <button onClick={confirmOther} disabled={!otherText.trim()}
+                    style={{flexShrink:0,padding:"0 20px",background:otherText.trim()?C.sage:C.subtle,
+                      color:"#fff",border:"none",borderRadius:12,fontFamily:"inherit",fontSize:15,
+                      fontWeight:600,cursor:otherText.trim()?"pointer":"default",
+                      WebkitTapHighlightColor:"transparent"}}>Confirm</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{fontSize:16,fontWeight:600,color:C.text,margin:"4px 4px 16px"}}>
+                  What are you doing today?
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+                  {SHEET_OPTIONS.map(opt=>(
+                    <button key={opt.action} onClick={()=>onSheetOption(opt)}
+                      style={{display:"flex",flexDirection:"column",alignItems:"center",
+                        justifyContent:"center",gap:5,minHeight:64,padding:"12px 4px",
+                        background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,
+                        cursor:"pointer",fontFamily:"inherit",WebkitTapHighlightColor:"transparent"}}>
+                      <span style={{fontSize:24,lineHeight:1}}>{opt.emoji}</span>
+                      <span style={{fontSize:11,color:C.muted,textAlign:"center",lineHeight:1.15}}>{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </>
       )}
@@ -1376,6 +1408,8 @@ export default function App() {
   const [view,setView]=useState("today");
   const [screen,setScreen]=useState("main");
   const [editKey,setEditKey]=useState(null);
+  const [editEntry,setEditEntry]=useState(null);   // optional override entry for the editor
+  const [editIsRun,setEditIsRun]=useState(false);  // editor opened for a run (RUN TYPE label)
   const [wkOff,setWkOff]=useState(0);
   const [moOff,setMoOff]=useState(0);
   const [dayOff,setDayOff]=useState(0);   // which day the Today view shows (offset from today)
@@ -1413,7 +1447,7 @@ export default function App() {
     name:nn??name,athleteName:na??athleteName,raceDate:nr??raceDate,startDate:ns??startDate,plan:np??plan
   })).catch(()=>{});
   const updDay=(dk,u)=>{ const np={...plan,[dk]:{...plan[dk],...u}}; setPlan(np); save(np); };
-  const openEdit=(dk)=>{ setEditKey(dk); setScreen("editday"); };
+  const openEdit=(dk,entryOverride,isRun)=>{ setEditKey(dk); setEditEntry(entryOverride||null); setEditIsRun(!!isRun); setScreen("editday"); };
   // Tapping a day in Week/Month jumps to that day in the Today view.
   const goToDay=(dk)=>{ setDayOff(daysUntil(dk)??0); setView("today"); };
   // Tapping a week in Journey jumps to that week in the Week view.
@@ -1453,7 +1487,7 @@ export default function App() {
       }}/>
   );
   if(screen==="editday"&&editKey) return (
-    <EditDayScreen dateKey={editKey} entry={plan[editKey]||{}}
+    <EditDayScreen dateKey={editKey} entry={editEntry||plan[editKey]||{}} isRun={editIsRun}
       onBack={()=>setScreen("main")}
       onSave={(u)=>{ updDay(editKey,u); setScreen("main"); }}/>
   );
