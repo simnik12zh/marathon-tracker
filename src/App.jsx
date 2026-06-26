@@ -1074,48 +1074,19 @@ function JourneyView({plan,today,raceDate,onGoToWeek}) {
 
   const todayD=new Date(today+"T00:00:00");
   const curWeek=Math.min(17,Math.max(1,Math.floor((todayD-planStart)/(7*86400000))+1));
-  const curPhase=PHASES.find(p=>p.weeks.includes(curWeek))||PHASES[0];
-
-  // Plan-wide totals + date progress for the summary card.
-  let totalDone=0, totalPlanned=0;
-  for (const k in plan) { totalDone+=actualKm(plan[k]); totalPlanned+=plannedKm(plan[k]); }
-  const raceD=raceDate?new Date(raceDate+"T00:00:00"):planStart;
-  const dateProgress=Math.max(0,Math.min(1,(todayD-planStart)/((raceD-planStart)||1)));
-  const daysLeft=daysUntil(raceDate);
 
   const weekStats=(N)=>{
     const entries=weekDays(N).map(dk=>plan[dk]||{});
     const planned=entries.reduce((s,e)=>s+plannedKm(e),0);
     const done=entries.reduce((s,e)=>s+actualKm(e),0);
     const longRun=entries.reduce((mx,e)=>Math.max(mx,plannedKm(e)),0);
-    return {planned,done,longRun};
+    const started=entries.some(e=>e.completed);   // any session in the week completed
+    return {planned,done,longRun,started};
   };
 
 
   return (
     <div style={{padding:"16px 16px 32px"}}>
-      {/* Summary card */}
-      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:18,padding:18,marginBottom:26}}>
-        <div style={{fontSize:13,fontWeight:700,color:C.sageDk,textTransform:"uppercase",letterSpacing:".06em"}}>
-          Week {curWeek} of 17 · {curPhase.name}
-        </div>
-        <div style={{height:8,background:"rgba(196,168,130,0.25)",borderRadius:4,marginTop:12,overflow:"hidden"}}>
-          <div style={{height:"100%",width:`${Math.round(dateProgress*100)}%`,background:C.sage}}/>
-        </div>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginTop:14}}>
-          <div>
-            <div style={{fontFamily:"monospace",fontSize:18,fontWeight:700,color:C.text}}>
-              <span style={{color:totalDone>0?C.done:C.text}}>{fmtKm(totalDone)}</span> / {fmtKm(totalPlanned)} km
-            </div>
-            <div style={{fontSize:10,color:C.muted,marginTop:2,textTransform:"uppercase",letterSpacing:".05em"}}>done / planned</div>
-          </div>
-          <div style={{textAlign:"right"}}>
-            <div style={{fontFamily:"monospace",fontSize:18,fontWeight:700,color:C.sage}}>{daysLeft??"—"}</div>
-            <div style={{fontSize:10,color:C.muted,marginTop:2,textTransform:"uppercase",letterSpacing:".05em"}}>days to race</div>
-          </div>
-        </div>
-      </div>
-
       {/* Phases */}
       {PHASES.map((phase,pi)=>{
         const phasePlanned=phase.weeks.reduce((s,N)=>s+weekStats(N).planned,0);
@@ -1131,13 +1102,15 @@ function JourneyView({plan,today,raceDate,onGoToWeek}) {
             </div>
 
             {phase.weeks.map(N=>{
-              const {planned,done,longRun}=weekStats(N);
+              const {planned,done,longRun,started}=weekStats(N);
               const days=weekDays(N);
               const mon=days[0];
               const isCurrent=N===curWeek;
               const isDeload=DELOAD_WEEKS.includes(N);
-              const started=new Date(mon+"T00:00:00")<=todayD;
+              const isFuture=new Date(mon+"T00:00:00")>todayD;   // Monday strictly after today
               const pct=planned>0?Math.min(1,done/planned):0;
+              const barPct=isFuture?0:pct;                       // future weeks: no green fill
+              const showDone=!isFuture&&started;                 // started, non-future → done/planned
               const range=`${fmtMD(new Date(mon+"T00:00:00"))} – ${fmtMD(new Date(days[6]+"T00:00:00"))}`;
               return (
                 <div key={N}>
@@ -1159,11 +1132,11 @@ function JourneyView({plan,today,raceDate,onGoToWeek}) {
                       )}
                     </div>
                     <div style={{height:6,background:"rgba(196,168,130,0.3)",borderRadius:3,marginTop:8,overflow:"hidden"}}>
-                      <div style={{height:"100%",width:`${Math.round(pct*100)}%`,background:C.done}}/>
+                      <div style={{height:"100%",width:`${Math.round(barPct*100)}%`,background:C.done}}/>
                     </div>
                     <div style={{fontSize:12,color:C.muted,fontFamily:"monospace",marginTop:8}}>
-                      {started
-                        ? <><span style={{color:done>0?C.done:C.muted}}>{fmtKm(done)}</span> / {fmtKm(planned)} km</>
+                      {showDone
+                        ? <><span style={{color:C.done}}>{fmtKm(done)}</span> / {fmtKm(planned)} km</>
                         : `${fmtKm(planned)} km planned`}
                     </div>
                   </div>
