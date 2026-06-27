@@ -776,13 +776,13 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
           {
             // Green only counts km actually run; the planned total stays neutral.
             node: wkTarget>0
-              ? <><span style={{color:wkDone>0?C.done:C.text}}>{fmtKm(wkDone)}</span>/{fmtKm(wkTarget)}</>
+              ? <><span style={{color:wkDone>0?C.done:C.text}}>{fmtKm(wkDone)}</span>/{fmtKm(wkTarget)}<span style={{fontSize:11,color:C.muted,fontWeight:500}}> km</span></>
               : "—",
             lbl: "This week",
           },
           {
             node: mTarget>0
-              ? <><span style={{color:mDone>0?C.done:C.text}}>{fmtKm(mDone)}</span>/{fmtKm(mTarget)}</>
+              ? <><span style={{color:mDone>0?C.done:C.text}}>{fmtKm(mDone)}</span>/{fmtKm(mTarget)}<span style={{fontSize:11,color:C.muted,fontWeight:500}}> km</span></>
               : "—",
             lbl: new Date().toLocaleDateString('en-US',{month:'long'}).toUpperCase(),
           },
@@ -1399,6 +1399,14 @@ function CoachScreen({viewKey,plan,athleteName,raceName,raceDate,startDate,onBac
   const [sending,setSending]=useState(false);
   const [coachError,setCoachError]=useState(false);
   const coachKey=`coach-${viewKey}`;
+  const inputRef=useRef(null);
+
+  // Auto-focus the input on open; the 300ms delay lets the screen transition
+  // finish first so the keyboard doesn't fire mid-animation and cause a jump.
+  useEffect(()=>{
+    const t=setTimeout(()=>inputRef.current?.focus(),300);
+    return ()=>clearTimeout(t);
+  },[]);
 
   // Load this day's saved conversation on mount.
   useEffect(()=>{
@@ -1539,7 +1547,7 @@ function CoachScreen({viewKey,plan,athleteName,raceName,raceDate,startDate,onBac
       <div style={{flexShrink:0,background:C.surface,borderTop:`1px solid ${C.border}`,
         padding:"10px 16px calc(10px + env(safe-area-inset-bottom,0px))",
         display:"flex",gap:8,alignItems:"center"}}>
-        <input type="text" value={input}
+        <input ref={inputRef} type="text" value={input}
           onChange={ev=>setInput(ev.target.value)}
           onKeyDown={ev=>{ if (ev.key==="Enter"){ ev.preventDefault(); sendCoach(); } }}
           placeholder="Ask the coach…" disabled={sending}
