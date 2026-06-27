@@ -1821,10 +1821,11 @@ export default function App() {
         {view==="journey"&&<JourneyView plan={plan} today={today} raceDate={raceDate} onGoToWeek={goToWeek}/>}
       </div>
 
-      {/* Bottom tab bar — fixed in the thumb zone, above the home indicator. */}
+      {/* Bottom tab bar — fixed in the thumb zone. Extra bottom padding lifts the
+          labels clear of the iPhone home indicator (safe-area inset + buffer). */}
       <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:40,
         background:C.surface,borderTop:`1px solid ${C.border}`,display:"flex",
-        paddingBottom:"env(safe-area-inset-bottom,0px)",
+        paddingTop:4,paddingBottom:"calc(env(safe-area-inset-bottom,0px) + 8px)",
         boxShadow:"0 -2px 14px rgba(0,0,0,0.05)"}}>
         {[["today","Today"],["week","Week"],["month","Month"],["journey","Journey"]].map(([v,label])=>{
           const active=view===v;
