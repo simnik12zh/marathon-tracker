@@ -293,6 +293,24 @@ function NavArrow({onClick,dir}) {
     </button>
   );
 }
+// Line icons for the bottom tab bar.
+function TabIcon({name,size=23}) {
+  const p={width:size,height:size,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",
+    strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"};
+  if (name==="today") return <svg {...p}>
+    <rect x="3" y="4" width="18" height="17" rx="2.5"/>
+    <path d="M3 9h18M8 2.5v3.5M16 2.5v3.5"/>
+    <circle cx="12" cy="15" r="1.7" fill="currentColor" stroke="none"/></svg>;
+  if (name==="week") return <svg {...p}>
+    <path d="M8 6h12M8 12h12M8 18h12"/>
+    <circle cx="4" cy="6" r="1.1" fill="currentColor" stroke="none"/>
+    <circle cx="4" cy="12" r="1.1" fill="currentColor" stroke="none"/>
+    <circle cx="4" cy="18" r="1.1" fill="currentColor" stroke="none"/></svg>;
+  if (name==="month") return <svg {...p}>
+    <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+    <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>;
+  return <svg {...p}><path d="M5 21V3M5 4h12l-2 3.5L17 11H5"/></svg>;   // journey — flag
+}
 
 // ─── Tip card ─────────────────────────────────────────────────────────────────
 // Running training zone, shown as a pill in TipCard (running sessions only).
@@ -394,6 +412,7 @@ function SetupScreen({initName,initAthlete,isEdit,onBack,onSave}) {
       if (d.coach&&typeof d.coach==='object') {
         Object.keys(d.coach).forEach(k=>{ if (k.startsWith('coach-')) localStorage.setItem(k, d.coach[k]); });
       }
+      try { sessionStorage.setItem('justRestored','1'); } catch {}
       window.location.reload();
     } catch(e) {
       setPendingImport(null);
@@ -428,7 +447,7 @@ function SetupScreen({initName,initAthlete,isEdit,onBack,onSave}) {
           lineHeight:1.25,color:C.text}}>Your marathon,<br/>your journey</div>
         <div style={{fontSize:15,color:C.muted,textAlign:"center",marginBottom:40,
           lineHeight:1.6,maxWidth:280}}>
-          Set your race day, load your plan, track every kilometre.
+          Your plan is ready. Track every kilometre, all the way to race day.
         </div>
       </>}
       <div style={{background:C.surface,border:`1px solid ${C.border}`,
@@ -848,7 +867,7 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
                   border:`2.5px solid ${C.sage}`,background:C.sageLt,cursor:"pointer",
                   display:"flex",flexShrink:0,alignItems:"center",justifyContent:"center",
                   WebkitTapHighlightColor:"transparent"}}>
-                <span style={{fontSize:11,fontWeight:700,color:C.borderSt,letterSpacing:'.08em'}}>LOG</span>
+                <span style={{fontSize:11,fontWeight:700,color:C.sageDk,letterSpacing:'.08em'}}>LOG</span>
               </button>
           )}
           <button onClick={()=>setSheetOpen(true)} aria-label="Change workout"
@@ -1136,7 +1155,10 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay}) {
           const isT=dk===today;
           const hasKm=(e.km||0)>0;
           return (
-            <div key={dk} onClick={()=>onGoToDay(dk)} style={{
+            <button key={dk} onClick={()=>onGoToDay(dk)}
+              aria-label={`${DN[i]}, ${new Date(dk+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})} — ${e.workout?.trim()||"Rest"}`}
+              style={{
+              display:"block",width:"100%",fontFamily:"inherit",
               background:e.completed?C.doneLt:isT?C.sageLt:C.surface,
               border:`1.5px solid ${e.completed?C.done:isT?C.sage:C.border}`,
               borderRadius:12,padding:"13px 2px 11px",textAlign:"center",cursor:"pointer",
@@ -1150,7 +1172,7 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay}) {
                 color:e.completed?C.done:hasKm?C.warm:C.subtle}}>
                 {e.completed?`${fmtKm(actualKm(e))}k`:hasKm?`${fmtKm(e.km)}k`:"·"}
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -1163,7 +1185,10 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay}) {
         const target=plannedKm(e);
         const ran=actualKm(e);
         return (
-          <div key={dk} onClick={()=>onGoToDay(dk)} style={{
+          <button key={dk} onClick={()=>onGoToDay(dk)}
+            aria-label={`${DN[i]}, ${d.toLocaleDateString("en-US",{month:"short",day:"numeric"})} — ${e.workout?.trim()||"Rest"}`}
+            style={{
+            display:"block",width:"100%",textAlign:"left",fontFamily:"inherit",
             background:e.completed?C.doneLt:C.surface,
             border:`1px solid ${e.completed?C.done:C.border}`,
             borderRadius:16,padding:"14px 18px",marginBottom:10,cursor:"pointer",
@@ -1202,7 +1227,7 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay}) {
                   : <div style={{width:8,height:8,borderRadius:"50%",background:C.border}}/>}
               </div>
             </div>
-          </div>
+          </button>
         );
       })}
       </div>{/* /week-slide */}
@@ -1265,7 +1290,10 @@ function MonthView({today,plan,moOff,setMoOff,onGoToDay}) {
           const hasWorkout=!!e.workout?.trim();
           const isT=dk===today;
           return (
-            <div key={dk} onClick={()=>onGoToDay(dk)} style={{
+            <button key={dk} onClick={()=>onGoToDay(dk)}
+              aria-label={`${new Date(dk+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})} — ${e.workout?.trim()||"Rest"}`}
+              style={{
+              width:"100%",padding:0,fontFamily:"inherit",
               aspectRatio:"1",borderRadius:10,display:"flex",flexDirection:"column",
               alignItems:"center",justifyContent:"center",gap:2,cursor:"pointer",
               background:e.completed?C.doneLt:hasWorkout?C.surface:"transparent",
@@ -1288,7 +1316,7 @@ function MonthView({today,plan,moOff,setMoOff,onGoToDay}) {
                       {ALTS.find(a=>e.workout?.includes(a.label))?.emoji||"⚡"}
                     </div>
                   : null}
-            </div>
+            </button>
           );
         })}
       </div>
@@ -1356,7 +1384,9 @@ function JourneyView({plan,today,raceDate,onGoToWeek}) {
               const range=`${fmtMD(new Date(mon+"T00:00:00"))} – ${fmtMD(new Date(days[6]+"T00:00:00"))}`;
               return (
                 <div key={N}>
-                  <div onClick={()=>onGoToWeek(mon)} style={{cursor:"pointer",
+                  <button onClick={()=>onGoToWeek(mon)} aria-label={`Week ${N}, ${range}`}
+                    style={{display:"block",width:"100%",textAlign:"left",background:"none",
+                    border:"none",cursor:"pointer",fontFamily:"inherit",
                     borderLeft:`3px solid ${isCurrent?C.sage:"transparent"}`,
                     padding:"12px 0 12px 14px",WebkitTapHighlightColor:"transparent"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8}}>
@@ -1381,7 +1411,7 @@ function JourneyView({plan,today,raceDate,onGoToWeek}) {
                         ? <><span style={{color:C.done}}>{fmtKm(done)}</span> / {fmtKm(planned)} km</>
                         : `${fmtKm(planned)} km planned`}
                     </div>
-                  </div>
+                  </button>
                 </div>
               );
             })}
@@ -1580,6 +1610,7 @@ export default function App() {
   const [wkOff,setWkOff]=useState(0);
   const [moOff,setMoOff]=useState(0);
   const [dayOff,setDayOff]=useState(0);   // which day the Today view shows (offset from today)
+  const [restoredToast,setRestoredToast]=useState(false);   // brief "Backup restored" confirmation after import
 
   useEffect(()=>{
     (async()=>{
@@ -1609,6 +1640,27 @@ export default function App() {
       setLoading(false);
     })();
   },[]);
+
+  // Respect prefers-reduced-motion globally: neutralise keyframe animations and
+  // transitions, and give keyboard users a visible focus ring. Injected once.
+  useEffect(()=>{
+    if (document.getElementById("a11y-global-style")) return;
+    const s=document.createElement("style");
+    s.id="a11y-global-style";
+    s.textContent="@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;scroll-behavior:auto !important}}:focus-visible{outline:2px solid #8B9E8A !important;outline-offset:2px !important}";
+    document.head.appendChild(s);
+  },[]);
+
+  // Surface a one-shot "Backup restored" toast after a restore reload (the flag
+  // is set just before window.location.reload in SetupScreen.confirmImport).
+  useEffect(()=>{
+    try { if (sessionStorage.getItem("justRestored")) { sessionStorage.removeItem("justRestored"); setRestoredToast(true); } } catch {}
+  },[]);
+  useEffect(()=>{
+    if (!restoredToast) return;
+    const t=setTimeout(()=>setRestoredToast(false),3200);
+    return ()=>clearTimeout(t);
+  },[restoredToast]);
 
   const save=(np,nn,nr,ns,na)=>storeSet(SK,JSON.stringify({
     name:nn??name,athleteName:na??athleteName,raceDate:nr??raceDate,startDate:ns??startDate,plan:np??plan
@@ -1669,6 +1721,19 @@ export default function App() {
       fontFamily:"system-ui,-apple-system,sans-serif",color:C.text,
       paddingBottom:"env(safe-area-inset-bottom,0px)",
       WebkitFontSmoothing:"antialiased"}}>
+
+      {/* One-shot restore confirmation */}
+      {restoredToast&&(
+        <div role="status" style={{position:"fixed",left:0,right:0,zIndex:70,
+          top:"calc(env(safe-area-inset-top,0px) + 12px)",display:"flex",
+          justifyContent:"center",pointerEvents:"none"}}>
+          <div style={{background:C.done,color:"#fff",fontSize:14,fontWeight:600,
+            padding:"10px 18px",borderRadius:99,display:"flex",alignItems:"center",gap:8,
+            boxShadow:"0 4px 16px rgba(0,0,0,0.18)"}}>
+            <Chk size={15}/> Backup restored
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,
@@ -1746,27 +1811,35 @@ export default function App() {
             </div>
           </div>
 
-          <div style={{display:"flex",borderTop:`1px solid ${C.border}`,
-            marginLeft:-20,marginRight:-20,paddingLeft:20,paddingRight:20}}>
-            {["today","week","month","journey"].map(v=>(
-              <button key={v} onClick={()=>{ setView(v); if(v==="today") setDayOff(0); }} style={{
-                flex:1,padding:"13px 0",background:"none",border:"none",
-                borderBottom:`2.5px solid ${view===v?C.sage:"transparent"}`,
-                cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:600,
-                color:view===v?C.sage:C.muted,
-                WebkitTapHighlightColor:"transparent"}}>
-                {v.charAt(0).toUpperCase()+v.slice(1)}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
-      <div style={{paddingBottom:32}}>
+      <div style={{paddingBottom:"calc(80px + env(safe-area-inset-bottom,0px))"}}>
         {view==="today"&&<TodayView plan={plan} updDay={updDay} onEdit={openEdit} dayOff={dayOff} setDayOff={setDayOff} onOpenCoach={()=>setScreen("coach")}/>}
         {view==="week"&&<WeekView today={today} plan={plan} wkOff={wkOff} setWkOff={setWkOff} onGoToDay={goToDay}/>}
         {view==="month"&&<MonthView today={today} plan={plan} moOff={moOff} setMoOff={setMoOff} onGoToDay={goToDay}/>}
         {view==="journey"&&<JourneyView plan={plan} today={today} raceDate={raceDate} onGoToWeek={goToWeek}/>}
+      </div>
+
+      {/* Bottom tab bar — fixed in the thumb zone, above the home indicator. */}
+      <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:40,
+        background:C.surface,borderTop:`1px solid ${C.border}`,display:"flex",
+        paddingBottom:"env(safe-area-inset-bottom,0px)",
+        boxShadow:"0 -2px 14px rgba(0,0,0,0.05)"}}>
+        {[["today","Today"],["week","Week"],["month","Month"],["journey","Journey"]].map(([v,label])=>{
+          const active=view===v;
+          return (
+            <button key={v} onClick={()=>{ setView(v); if(v==="today") setDayOff(0); }}
+              aria-label={label} aria-current={active?"page":undefined}
+              style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",
+                justifyContent:"center",gap:3,minHeight:56,padding:"8px 0 6px",
+                background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",
+                color:active?C.sage:C.muted,WebkitTapHighlightColor:"transparent"}}>
+              <TabIcon name={v}/>
+              <span style={{fontSize:11,fontWeight:active?700:500,letterSpacing:".01em"}}>{label}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
