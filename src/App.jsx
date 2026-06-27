@@ -1821,11 +1821,12 @@ export default function App() {
         {view==="journey"&&<JourneyView plan={plan} today={today} raceDate={raceDate} onGoToWeek={goToWeek}/>}
       </div>
 
-      {/* Bottom tab bar — fixed in the thumb zone. Extra bottom padding lifts the
-          labels clear of the iPhone home indicator (safe-area inset + buffer). */}
+      {/* Bottom tab bar — fixed in the thumb zone. Content is anchored to the bottom
+          (flex-end) so labels sit just above the safe-area inset, like native iOS
+          tab bars, rather than floating centred in a tall bar. */}
       <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:40,
         background:C.surface,borderTop:`1px solid ${C.border}`,display:"flex",
-        paddingTop:4,paddingBottom:"calc(env(safe-area-inset-bottom,0px) + 2px)",
+        paddingTop:6,paddingBottom:"env(safe-area-inset-bottom,0px)",
         boxShadow:"0 -2px 14px rgba(0,0,0,0.05)"}}>
         {[["today","Today"],["week","Week"],["month","Month"],["journey","Journey"]].map(([v,label])=>{
           const active=view===v;
@@ -1833,7 +1834,7 @@ export default function App() {
             <button key={v} onClick={()=>{ setView(v); if(v==="today") setDayOff(0); }}
               aria-label={label} aria-current={active?"page":undefined}
               style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",
-                justifyContent:"center",gap:3,minHeight:56,padding:"8px 0 6px",
+                justifyContent:"flex-end",gap:3,minHeight:48,padding:"6px 0 2px",
                 background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",
                 color:active?C.sage:C.muted,WebkitTapHighlightColor:"transparent"}}>
               <TabIcon name={v}/>
