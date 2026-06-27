@@ -1575,7 +1575,7 @@ function CoachScreen({viewKey,plan,athleteName,raceName,raceDate,startDate,onBac
 
       {/* Input bar — pinned at the bottom above the safe area */}
       <div style={{flexShrink:0,background:C.surface,borderTop:`1px solid ${C.border}`,
-        padding:"10px 16px calc(10px + env(safe-area-inset-bottom,0px))",
+        padding:"10px 16px calc(2px + env(safe-area-inset-bottom,0px))",
         display:"flex",gap:8,alignItems:"center"}}>
         <input ref={inputRef} type="text" value={input}
           onChange={ev=>setInput(ev.target.value)}
@@ -1825,7 +1825,7 @@ export default function App() {
           labels clear of the iPhone home indicator (safe-area inset + buffer). */}
       <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:40,
         background:C.surface,borderTop:`1px solid ${C.border}`,display:"flex",
-        paddingTop:4,paddingBottom:"calc(env(safe-area-inset-bottom,0px) + 8px)",
+        paddingTop:4,paddingBottom:"calc(env(safe-area-inset-bottom,0px) + 2px)",
         boxShadow:"0 -2px 14px rgba(0,0,0,0.05)"}}>
         {[["today","Today"],["week","Week"],["month","Month"],["journey","Journey"]].map(([v,label])=>{
           const active=view===v;
