@@ -832,7 +832,13 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
           {!isToday&&<button onClick={()=>setDayOff(0)} style={{
             fontSize:11,fontWeight:700,color:C.sage,background:C.sageLt,
             border:"none",borderRadius:20,padding:"4px 12px",cursor:"pointer",
-            marginTop:4,WebkitTapHighlightColor:"transparent"}}>↩ Today</button>}
+            marginTop:4,display:"inline-flex",alignItems:"center",gap:4,
+            WebkitTapHighlightColor:"transparent"}}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            Today</button>}
         </div>
         <NavArrow onClick={()=>navDay(1)} dir="right"/>
       </div>
@@ -1140,7 +1146,13 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay}) {
           {wkOff!==0&&<button onClick={()=>setWkOff(0)} style={{
             fontSize:11,fontWeight:700,color:C.sage,background:C.sageLt,
             border:"none",borderRadius:20,padding:"4px 12px",cursor:"pointer",
-            marginTop:4,WebkitTapHighlightColor:"transparent"}}>↩ Today</button>}
+            marginTop:4,display:"inline-flex",alignItems:"center",gap:4,
+            WebkitTapHighlightColor:"transparent"}}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            Today</button>}
         </div>
         <NavArrow onClick={()=>navWeek(1)} dir="right"/>
       </div>
@@ -1271,7 +1283,13 @@ function MonthView({today,plan,moOff,setMoOff,onGoToDay}) {
           {moOff!==0&&<button onClick={()=>setMoOff(0)} style={{
             fontSize:11,fontWeight:700,color:C.sage,background:C.sageLt,
             border:"none",borderRadius:20,padding:"4px 12px",cursor:"pointer",
-            marginTop:4,WebkitTapHighlightColor:"transparent"}}>↩ Today</button>}
+            marginTop:4,display:"inline-flex",alignItems:"center",gap:4,
+            WebkitTapHighlightColor:"transparent"}}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            Today</button>}
         </div>
         <NavArrow onClick={()=>navMonth(1)} dir="right"/>
       </div>
@@ -1750,8 +1768,14 @@ export default function App() {
               background:"none",border:`1px solid ${C.border}`,borderRadius:10,
               width:44,height:44,cursor:"pointer",display:"flex",
               alignItems:"center",justifyContent:"center",
-              color:C.muted,fontSize:18,flexShrink:0,
-              WebkitTapHighlightColor:"transparent"}}>⚙</button>
+              color:C.muted,flexShrink:0,
+              WebkitTapHighlightColor:"transparent"}} aria-label="Race settings">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+            </button>
           </div>
 
           <div style={{display:"flex",gap:16,alignItems:"center",paddingBottom:16}}>
