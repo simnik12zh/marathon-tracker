@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 
-const SK = "marathon-v9";
+const SK = "marathon-v10";
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DL = ["M","T","W","T","F","S","S"];
 const DN = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
@@ -375,35 +375,35 @@ const MILESTONES = [
 const PLAN_WEEKS = [
   // Week 1 (Jun 29) — Phase 1: Base
   [['Pilates',null],['Easy run',8],['Strength',null],['Easy run',8],['Yoga',null],['Long run',16],['Easy recovery run',6]],
-  // Week 2 (Jul 6) — Phase 1: Base
-  [['Pilates',null],['Easy run',8],['Yoga',null],['Easy run',10],['Strength',null],['Long run',18],['Easy recovery run',6]],
-  // Week 3 (Jul 13) — Phase 1: Base
-  [['Pilates',null],['Easy run',10],['Strength',null],['Easy run',10],['Yoga',null],['Long run',20],['Easy recovery run',8]],
+  // Week 2 (Jul 6) — Ibiza Thu-Sun, reduced volume
+  [['Pilates',null],['Easy run',8],['Easy run',8],['Easy run',5],['Yoga',null],['Easy run',6],null],
+  // Week 3 (Jul 13) — back from Ibiza Tue
+  [['Easy run',5],['Easy run',8],['Strength',null],['Easy run',10],['Yoga',null],['Long run',18],['Easy recovery run',6]],
   // Week 4 (Jul 20) — Deload
   [['Yoga',null],['Easy run',7],['Pilates',null],['Easy run',8],null,['Long run',15],['Easy recovery run',6]],
   // Week 5 (Jul 27) — Phase 2: Build
-  [['Pilates',null],['Easy run',10],['Tempo run',10],['Strength',null],['Easy run',8],['Long run',22],['Easy recovery run',8]],
-  // Week 6 (Aug 3) — Phase 2: Build
-  [['Pilates',null],['Easy run',10],null,['Tempo run',12],['Yoga',null],['Long run',24],['Easy recovery run',8]],
-  // Week 7 (Aug 10) — Phase 2: Build
-  [['Pilates',null],['Easy run',10],['Track session – 6×800m',11],['Strength',null],['Easy run',8],['Long run',26],['Easy recovery run',8]],
-  // Week 8 (Aug 17) — Deload
-  [['Yoga',null],['Easy run',8],['Pilates',null],['Easy run',8],null,['Long run',18],['Easy recovery run',6]],
-  // Week 9 (Aug 24) — Phase 3: Peak
-  [['Pilates',null],['Easy run',10],['Tempo run',14],['Strength',null],['Easy run',8],['Long run – test gels',28],['Easy recovery run',10]],
-  // Week 10 (Aug 31) — Phase 3: Peak
+  [['Pilates',null],['Easy run',10],['Tempo run',10],['Strength',null],['Easy run',8],['Long run',20],['Easy recovery run',8]],
+  // Week 6 (Aug 3) — Build
+  [['Pilates',null],['Easy run',10],['Track session – 6×800m',11],['Strength',null],['Easy run',8],['Long run',22],['Easy recovery run',8]],
+  // Week 7 (Aug 10) — Build
+  [['Pilates',null],['Easy run',10],['Tempo run',12],['Yoga',null],['Easy run',8],['Long run',24],['Easy recovery run',8]],
+  // Week 8 (Aug 17) — last hard week before Tuscany
+  [['Pilates',null],['Easy run',10],['Track session – 8×1km',14],['Strength',null],['Easy run',8],['Long run',26],['Easy recovery run',8]],
+  // Week 9 (Aug 24) — Tuscany Week 1: cycling heavy
+  [['Cycling',null],['Easy run',6],['Cycling',null],['Easy run',6],['Yoga',null],['Cycling',null],['Easy run',8]],
+  // Week 10 (Aug 31) — Tuscany Week 2: full rest
+  [['Walking',null],['Yoga',null],['Walking',null],['Yoga',null],null,null,null],
+  // Week 11 (Sep 7) — Phase 3: Peak, comeback week
+  [['Pilates',null],['Easy run',10],['Tempo run',12],['Strength',null],['Easy run',8],['Long run – test gels',28],['Easy recovery run',10]],
+  // Week 12 (Sep 14) — Peak
   [['Pilates',null],['Easy run',10],['Track session – 8×1km',14],['Yoga',null],['Easy run',8],['Long run – test gels',30],['Easy recovery run',10]],
-  // Week 11 (Sep 7) — Peak week
+  // Week 13 (Sep 21) — TRUE PEAK WEEK
   [['Strength',null],['Easy run',10],['Tempo run',14],['Pilates',null],['Easy run',8],['Long run – test gels',32],['Easy recovery run',10]],
-  // Week 12 (Sep 14) — Deload
+  // Week 14 (Sep 28) — Deload
   [['Yoga',null],['Easy run',8],['Pilates',null],['Easy run',8],null,['Long run',20],['Easy recovery run',6]],
-  // Week 13 (Sep 21) — Phase 4: Taper
-  [['Pilates',null],['Easy run',10],['Tempo run',10],['Strength',null],['Easy run',8],['Long run',22],['Easy recovery run',8]],
-  // Week 14 (Sep 28) — Taper
-  [['Yoga',null],['Easy run',8],['Sharpener – 5×1km',10],['Pilates',null],['Easy run',6],['Long run',18],['Easy recovery run',6]],
-  // Week 15 (Oct 5) — Taper
-  [['Pilates',null],['Easy run',8],['Tempo run',8],['Yoga',null],['Easy run',6],['Long run',14],['Easy recovery run',5]],
-  // Week 16 (Oct 12) — Final taper
+  // Week 15 (Oct 5) — Taper begins
+  [['Pilates',null],['Easy run',8],['Sharpener – 5×1km',10],['Yoga',null],['Easy run',6],['Long run',16],['Easy recovery run',5]],
+  // Week 16 (Oct 12) — Deep taper
   [['Yoga',null],['Easy run with strides',6],['Pilates',null],['Easy run',5],null,['Easy run',8],['Easy recovery run',4]],
   // Week 17 (Oct 19) — Race week
   [['Pilates',null],['Easy jog with strides',5],['Easy jog',4],['Yoga',null],['Shake-out jog',3],null,['Marathon – Race Day',42.2]],
@@ -1559,13 +1559,14 @@ function MonthView({today,plan,moOff,setMoOff,onGoToDay}) {
 
 // ─── Journey view ───────────────────────────────────────────────────────────────
 const PHASES = [
-  { name: 'Base', weeks: [1,2,3,4], description: 'Building your running foundation. Tendons, joints and fascia adapting to the load. Keep everything easy.' },
-  { name: 'Build', weeks: [5,6,7,8], description: 'First quality sessions introduced. Volume increases deliberately. Your aerobic engine is growing.' },
-  { name: 'Peak', weeks: [9,10,11,12], description: 'Highest training load of the plan. Your longest runs happen here. Trust the process even when it feels hard.' },
-  { name: 'Taper', weeks: [13,14,15,16], description: 'Volume drops, sharpness maintained. Your body is consolidating 16 weeks of work. Resist the urge to do more.' },
+  { name: 'Base', weeks: [1,2,3,4], description: 'Building your running foundation. Reduced volume during Ibiza (Jul 10–15). Keep everything easy.' },
+  { name: 'Build', weeks: [5,6,7,8], description: 'First quality sessions introduced. Volume builds to 26km long run before Tuscany.' },
+  { name: 'Tuscany', weeks: [9,10], description: 'Week 9: cycling and light running. Week 10: full rest. Your body consolidates everything.' },
+  { name: 'Peak', weeks: [11,12,13], description: 'Back with fresh legs. Highest training load. Longest runs happen here. Trust the process.' },
+  { name: 'Taper', weeks: [14,15,16], description: 'Volume drops, sharpness maintained. Your body is consolidating 13 weeks of hard work.' },
   { name: 'Race Week', weeks: [17], description: 'Stay off your feet. Eat well. Sleep. The hay is in the barn.' },
 ];
-const DELOAD_WEEKS = [4,8,12];   // cutback/recovery weeks within the plan
+const DELOAD_WEEKS = [4,14];   // cutback/recovery weeks within the plan (Tuscany has its own phase)
 
 function JourneyView({plan,today,raceDate,onGoToWeek}) {
   const planStart=new Date(2026,5,29);                 // Week 1 = Mon Jun 29 2026
