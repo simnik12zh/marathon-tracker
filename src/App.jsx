@@ -424,11 +424,16 @@ function buildDefaultPlan() {
 }
 
 // ─── Colours ──────────────────────────────────────────────────────────────────
+// Pink/red palette. `sage` is the mid-pink brand accent; `done`/`accent` is the red
+// used for active/completed/primary states. `surface` is a legacy alias for `card`,
+// `sageLt`/`sageDk`/`doneLt` are derived pink/red tints kept for existing references.
 const C = {
-  sage:"#8B9E8A", sageLt:"rgba(139,158,138,0.15)", sageDk:"#4d6b4c",
-  warm:"#C4A882", done:"#72ad6a", doneLt:"rgba(114,173,106,0.13)",
-  surface:"#FFFFFF", bg:"#F5F3EF", border:"#E5E1D8", borderSt:"#C8C4BA",
-  text:"#2A2A2A", muted:"#6E6E6E", subtle:"#736D60",
+  bg:"#FFF0F5", card:"#FFFFFF", surface:"#FFFFFF",
+  border:"#F0C0D0", borderSt:"#E8174A",
+  text:"#1A0A10", muted:"#9E6070",
+  sage:"#FF6B9D", sageLt:"rgba(255,107,157,0.15)", sageDk:"#C0134A",
+  warm:"#F0C0D0", done:"#E8174A", doneLt:"rgba(232,23,74,0.06)",
+  accent:"#E8174A", subtle:"#FDE0EA",
 };
 
 function Chk({size=14,color="#fff"}) {
@@ -470,14 +475,14 @@ function TabIcon({name,size=23}) {
 // ─── Tip card ─────────────────────────────────────────────────────────────────
 // Running training zone, shown as a pill in TipCard (running sessions only).
 const ZONE = {
-  'easy recovery run':  { label: 'Z1 · Recovery',  color: '#5a8a58', bg: 'rgba(90,138,88,0.1)' },
-  'easy run':           { label: 'Z2 · Aerobic',   color: '#5a8a58', bg: 'rgba(90,138,88,0.1)' },
-  'long run':           { label: 'Z2 · Aerobic',   color: '#5a8a58', bg: 'rgba(90,138,88,0.1)' },
-  'easy jog':           { label: 'Z1 · Recovery',  color: '#5a8a58', bg: 'rgba(90,138,88,0.1)' },
-  'shake-out jog':      { label: 'Z1 · Recovery',  color: '#5a8a58', bg: 'rgba(90,138,88,0.1)' },
-  'tempo run':          { label: 'Z3 · Tempo',     color: '#9a7a3a', bg: 'rgba(196,168,130,0.15)' },
-  'track session':      { label: 'Z4 · Threshold', color: '#c05050', bg: 'rgba(192,80,80,0.08)' },
-  'sharpener':          { label: 'Z4 · Threshold', color: '#c05050', bg: 'rgba(192,80,80,0.08)' },
+  'easy recovery run':  { label: 'Z1 · Recovery',  color: '#E8174A', bg: 'rgba(232,23,74,0.08)' },
+  'easy run':           { label: 'Z2 · Aerobic',   color: '#E8174A', bg: 'rgba(232,23,74,0.12)' },
+  'long run':           { label: 'Z2 · Aerobic',   color: '#E8174A', bg: 'rgba(232,23,74,0.12)' },
+  'easy jog':           { label: 'Z1 · Recovery',  color: '#E8174A', bg: 'rgba(232,23,74,0.08)' },
+  'shake-out jog':      { label: 'Z1 · Recovery',  color: '#E8174A', bg: 'rgba(232,23,74,0.08)' },
+  'tempo run':          { label: 'Z3 · Tempo',     color: '#C0134A', bg: 'rgba(255,107,157,0.2)' },
+  'track session':      { label: 'Z4 · Threshold', color: '#FFFFFF', bg: '#E8174A' },
+  'sharpener':          { label: 'Z4 · Threshold', color: '#FFFFFF', bg: '#E8174A' },
 };
 function getZone(workout) {
   if (!workout) return null;
@@ -616,7 +621,7 @@ function SetupScreen({initName,initAthlete,isEdit,onBack,onSave}) {
         <input style={inp} placeholder="e.g. Berlin Marathon 2026"
           value={n} onChange={e=>setN(e.target.value)}/>
         <button disabled={!ok} onClick={()=>onSave(a.trim(),n.trim())} style={{
-          width:"100%",padding:16,background:ok?C.sage:C.subtle,color:"#fff",
+          width:"100%",padding:16,background:ok?C.done:C.muted,color:"#fff",
           border:"none",borderRadius:14,fontFamily:"inherit",fontSize:17,fontWeight:600,
           cursor:ok?"pointer":"default",marginTop:24,
           WebkitTapHighlightColor:"transparent"}}>
@@ -626,7 +631,7 @@ function SetupScreen({initName,initAthlete,isEdit,onBack,onSave}) {
 
       {isEdit&&(
         <div style={{width:"100%",maxWidth:400,marginTop:18}}>
-          <button onClick={exportData} style={{width:"100%",padding:16,background:C.sage,
+          <button onClick={exportData} style={{width:"100%",padding:16,background:C.done,
             color:"#fff",border:"none",borderRadius:14,fontFamily:"inherit",fontSize:16,
             fontWeight:600,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
             📥 Export my data
@@ -675,7 +680,7 @@ function SetupScreen({initName,initAthlete,isEdit,onBack,onSave}) {
                   fontSize:15,cursor:"pointer",color:C.muted,WebkitTapHighlightColor:"transparent"}}>
                   Cancel
                 </button>
-                <button onClick={confirmImport} style={{flex:1,padding:13,background:C.sage,
+                <button onClick={confirmImport} style={{flex:1,padding:13,background:C.done,
                   color:"#fff",border:"none",borderRadius:12,fontFamily:"inherit",fontSize:15,
                   fontWeight:600,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
                   Confirm
@@ -724,7 +729,7 @@ function KmStepper({value,onAdjust,raw,setRaw,typing,setTyping,accent}) {
       <div onClick={()=>setTyping(true)} style={{flex:1,textAlign:"center",cursor:"pointer"}}>
         <KmBig value={value} color={accent} size={38}/>
         <span style={{fontSize:18,color:accent,fontWeight:500}}> km</span>
-        <div style={{fontSize:11,color:C.subtle,marginTop:3}}>tap to type exact</div>
+        <div style={{fontSize:11,color:C.muted,marginTop:3}}>tap to type exact</div>
       </div>
       <button onClick={()=>onAdjust(0.5)} style={stepBtn}>+</button>
     </div>
@@ -802,7 +807,7 @@ function EditDayScreen({dateKey:dk,entry,isRun,onSave,onBack}) {
         <label style={{fontSize:12,textTransform:"uppercase",letterSpacing:".08em",
           color:C.muted,display:"block",marginBottom:10,marginTop:20}}>Target distance</label>
         <KmStepper value={kmNum} onAdjust={stepKm} raw={km} setRaw={setKm}
-          typing={kmTyping} setTyping={setKmTyping} accent={C.sage}/>
+          typing={kmTyping} setTyping={setKmTyping} accent={C.done}/>
 
         <div style={{display:"flex",gap:12,marginTop:28}}>
           <button onClick={onBack} style={{padding:"15px 20px",background:C.surface,
@@ -811,7 +816,7 @@ function EditDayScreen({dateKey:dk,entry,isRun,onSave,onBack}) {
             WebkitTapHighlightColor:"transparent"}}>Cancel</button>
           <button onClick={()=>onSave({workout,km:parseFloat(km)||null,
             kmDone:entry.kmDone??null,completed:!!entry.completed,notes:entry.notes??''})}
-            style={{flex:1,padding:15,background:C.sage,color:"#fff",border:"none",
+            style={{flex:1,padding:15,background:C.done,color:"#fff",border:"none",
               borderRadius:14,fontFamily:"inherit",fontSize:16,fontWeight:600,
               cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>Save</button>
         </div>
@@ -908,7 +913,7 @@ function WorkoutSheet({dateKey:dk,entry,updDay,onEdit,onClose}) {
                   padding:"13px 15px",fontFamily:"inherit",fontSize:16,color:C.text,
                   background:C.bg,outline:"none",boxSizing:"border-box",WebkitAppearance:"none"}}/>
               <button onClick={confirmOther} disabled={!otherText.trim()}
-                style={{flexShrink:0,padding:"0 20px",background:otherText.trim()?C.sage:C.subtle,
+                style={{flexShrink:0,padding:"0 20px",background:otherText.trim()?C.done:C.muted,
                   color:"#fff",border:"none",borderRadius:12,fontFamily:"inherit",fontSize:15,
                   fontWeight:600,cursor:otherText.trim()?"pointer":"default",
                   WebkitTapHighlightColor:"transparent"}}>Confirm</button>
@@ -1064,7 +1069,7 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
 
       {/* Workout card */}
       <div style={{background:e.completed?C.doneLt:C.surface,
-        border:`1px solid ${e.completed?C.done:C.border}`,
+        border:`1px solid ${e.completed?"rgba(232,23,74,0.3)":C.border}`,
         borderRadius:18,padding:"20px 20px 16px"}}>
 
         {/* Name + check */}
@@ -1089,7 +1094,7 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
             : <button onClick={hasKm?completeRun:()=>updDay(viewKey,{completed:true})}
                 aria-label="Mark as done"
                 style={{width:64,height:64,borderRadius:"50%",
-                  border:`2.5px solid ${C.sage}`,background:C.sageLt,cursor:"pointer",
+                  border:`2.5px solid ${C.done}`,background:C.sageLt,cursor:"pointer",
                   display:"flex",flexShrink:0,alignItems:"center",justifyContent:"center",
                   WebkitTapHighlightColor:"transparent"}}>
                 <span style={{fontSize:11,fontWeight:700,color:C.sageDk,letterSpacing:'.08em'}}>LOG</span>
@@ -1113,7 +1118,7 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
         {/* km */}
         {hasKm&&(
           <div style={{marginTop:16,paddingTop:16,
-            borderTop:`1px solid ${e.completed?"rgba(114,173,106,.2)":C.border}`}}>
+            borderTop:`1px solid ${e.completed?"rgba(232,23,74,0.2)":C.border}`}}>
             {e.completed
               ? editingKm
                 ? <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -1143,7 +1148,7 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
                     <div onClick={openKmEdit} style={{flex:1,textAlign:"center",cursor:"pointer"}}>
                       <KmBig value={ran} color={C.done}/>
                       <span style={{fontSize:20,color:C.done,fontWeight:500}}> km</span>
-                      <div style={{fontSize:11,color:C.subtle,marginTop:3}}>
+                      <div style={{fontSize:11,color:C.muted,marginTop:3}}>
                         {ran!==target?`${fmtKm(target)} planned · `:""}tap to edit
                       </div>
                     </div>
@@ -1164,7 +1169,7 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
                         boxSizing:"border-box",textAlign:"center",WebkitAppearance:"none"}}/>
                     <span style={{fontSize:17,color:C.muted}}>km</span>
                     <button onClick={confirmPlannedKmEdit} style={{padding:"10px 16px",
-                      background:C.sage,color:"#fff",border:"none",borderRadius:10,
+                      background:C.done,color:"#fff",border:"none",borderRadius:10,
                       fontFamily:"inherit",fontSize:14,fontWeight:600,cursor:"pointer",
                       WebkitTapHighlightColor:"transparent"}}>✓</button>
                     <button onClick={()=>setEditingKm(false)} style={{padding:"10px 12px",
@@ -1181,7 +1186,7 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
                     <div onClick={openPlannedKmEdit} style={{flex:1,textAlign:"center",cursor:"pointer"}}>
                       <KmBig value={target} color={C.sage}/>
                       <span style={{fontSize:20,color:C.sage,fontWeight:500}}> km</span>
-                      <div style={{fontSize:11,color:C.subtle,marginTop:3}}>tap to type exact</div>
+                      <div style={{fontSize:11,color:C.muted,marginTop:3}}>tap to type exact</div>
                     </div>
                     <button onClick={()=>adjustPlannedKm(0.5)} style={{width:44,height:44,
                       borderRadius:"50%",background:C.bg,border:`1px solid ${C.border}`,
@@ -1196,7 +1201,7 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
         {/* Feeling rating — shown when completed */}
         {e.completed&&(
           <div style={{marginTop:12,paddingTop:12,
-            borderTop:`1px solid rgba(114,173,106,.2)`}}>
+            borderTop:`1px solid rgba(232,23,74,0.2)`}}>
             {e.feeling
               ? <div style={{display:"flex",alignItems:"center",gap:8}}>
                   <span style={{fontSize:24}}>{FEELINGS.find(f=>f.value===e.feeling)?.emoji}</span>
@@ -1260,7 +1265,7 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
       {/* Ask the coach — opens the full-screen coach. */}
       {e.workout?.trim()&&(
         <button onClick={onOpenCoach} style={{width:"100%",marginTop:16,padding:"14px",
-          background:"transparent",color:C.sageDk,border:`1.5px solid ${C.sage}`,borderRadius:12,
+          background:C.done,color:"#fff",border:"none",borderRadius:12,
           fontFamily:"inherit",fontSize:15,fontWeight:600,cursor:"pointer",
           display:"flex",alignItems:"center",justifyContent:"center",gap:8,
           WebkitTapHighlightColor:"transparent"}}>
@@ -1317,7 +1322,7 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay,updDay,onEdit,onSwapDays}
           {wkTarget>0&&(
             <div style={{fontSize:15,fontWeight:700,fontFamily:"monospace",marginTop:2}}>
               <span style={{color:wkDone>0?C.done:C.muted}}>{fmtKm(wkDone)}</span>
-              <span style={{color:C.subtle}}> / {fmtKm(wkTarget)} km</span>
+              <span style={{color:C.muted}}> / {fmtKm(wkTarget)} km</span>
             </div>
           )}
           {wkOff!==0&&<button onClick={()=>setWkOff(0)} style={{
@@ -1370,7 +1375,7 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay,updDay,onEdit,onSwapDays}
                 {new Date(dk+"T00:00:00").getDate()}
               </div>
               <div style={{fontSize:9,fontWeight:700,lineHeight:1,
-                color:e.completed?C.done:hasKm?C.warm:C.subtle}}>
+                color:e.completed?C.done:hasKm?C.warm:C.muted}}>
                 {e.completed?`${fmtKm(actualKm(e))}k`:hasKm?`${fmtKm(e.km)}k`:"·"}
               </div>
             </button>
@@ -1619,7 +1624,7 @@ function JourneyView({plan,today,raceDate,onGoToWeek}) {
                       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                         <span style={{fontSize:14,fontWeight:700,color:isCurrent?C.sageDk:C.text}}>Wk {N}</span>
                         <span style={{fontSize:12,color:C.muted}}>· {range}</span>
-                        {isDeload&&<span style={{fontSize:10,fontWeight:700,color:C.sageDk,
+                        {isDeload&&<span style={{fontSize:10,fontWeight:700,color:C.done,
                           background:C.sageLt,borderRadius:20,padding:"2px 8px"}}>↓ Recovery</span>}
                       </div>
                       {longRun>0&&(
@@ -1629,7 +1634,7 @@ function JourneyView({plan,today,raceDate,onGoToWeek}) {
                         </div>
                       )}
                     </div>
-                    <div style={{height:6,background:"rgba(196,168,130,0.3)",borderRadius:3,marginTop:8,overflow:"hidden"}}>
+                    <div style={{height:6,background:"rgba(255,107,157,0.18)",borderRadius:3,marginTop:8,overflow:"hidden"}}>
                       <div style={{height:"100%",width:`${Math.round(barPct*100)}%`,background:C.done}}/>
                     </div>
                     <div style={{fontSize:12,color:C.muted,fontFamily:"monospace",marginTop:8}}>
@@ -1811,7 +1816,7 @@ function CoachScreen({viewKey,plan,athleteName,raceName,raceDate,startDate,onBac
             padding:"12px 14px",fontFamily:"inherit",fontSize:15,color:C.text,
             background:C.bg,outline:"none",boxSizing:"border-box",WebkitAppearance:"none"}}/>
         <button onClick={sendCoach} disabled={sending||!input.trim()}
-          style={{padding:"14px 18px",background:input.trim()&&!sending?C.sage:C.border,
+          style={{padding:"14px 18px",background:input.trim()&&!sending?C.done:C.border,
             color:"#fff",border:"none",borderRadius:12,fontFamily:"inherit",fontSize:14,fontWeight:600,
             cursor:input.trim()&&!sending?"pointer":"default",flexShrink:0,
             WebkitTapHighlightColor:"transparent"}}>Send</button>
@@ -1874,7 +1879,7 @@ export default function App() {
     if (document.getElementById("a11y-global-style")) return;
     const s=document.createElement("style");
     s.id="a11y-global-style";
-    s.textContent="@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;scroll-behavior:auto !important}}:focus-visible{outline:2px solid #8B9E8A !important;outline-offset:2px !important}@keyframes celebFadeIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}";
+    s.textContent="@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;scroll-behavior:auto !important}}:focus-visible{outline:2px solid #E8174A !important;outline-offset:2px !important}@keyframes celebFadeIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}";
     document.head.appendChild(s);
   },[]);
 
@@ -2009,7 +2014,7 @@ export default function App() {
       {celebration && (
         <div onClick={() => setCelebration(null)} style={{
           position:'fixed', inset:0, zIndex:1000,
-          background:'rgba(139,158,138,0.92)',
+          background:'rgba(232,23,74,0.92)',
           display:'flex', flexDirection:'column',
           alignItems:'center', justifyContent:'center',
           padding:40, textAlign:'center',
@@ -2058,7 +2063,7 @@ export default function App() {
               <svg width="72" height="72" style={{transform:"rotate(-90deg)"}}>
                 <circle cx="36" cy="36" r="30" fill="none" stroke={C.border} strokeWidth="5.5"/>
                 <circle cx="36" cy="36" r="30" fill="none"
-                  stroke={raceCompleted?C.warm:C.sage} strokeWidth="5.5"
+                  stroke={raceCompleted?C.warm:C.done} strokeWidth="5.5"
                   strokeLinecap="round" strokeDasharray={circ}
                   strokeDashoffset={raceCompleted?0:ringOff}
                   style={{transition:"stroke-dashoffset .8s ease"}}/>
@@ -2102,7 +2107,7 @@ export default function App() {
                       {totalDone}/{totalPlanned} sessions · {pct}%
                     </div>
                     <div style={{height:5,background:C.border,borderRadius:99,overflow:"hidden"}}>
-                      <div style={{height:"100%",background:C.sage,borderRadius:99,
+                      <div style={{height:"100%",background:C.done,borderRadius:99,
                         width:`${pct}%`,transition:"width .6s ease"}}/>
                     </div>
                   </>
@@ -2135,7 +2140,7 @@ export default function App() {
               style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",
                 justifyContent:"flex-end",gap:3,minHeight:48,padding:"6px 0 2px",
                 background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",
-                color:active?C.sage:C.muted,WebkitTapHighlightColor:"transparent"}}>
+                color:active?C.done:C.muted,WebkitTapHighlightColor:"transparent"}}>
               <TabIcon name={v}/>
               <span style={{fontSize:11,fontWeight:active?700:500,letterSpacing:".01em"}}>{label}</span>
             </button>
