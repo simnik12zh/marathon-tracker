@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 
-const SK = "marathon-v8";
+const SK = "marathon-v9";
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DL = ["M","T","W","T","F","S","S"];
 const DN = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
@@ -46,6 +46,10 @@ function monthGrid(y,m) {
 function fmtKm(n) { if (!n) return "0"; return n%1===0?`${n}`:`${n.toFixed(1)}`; }
 function actualKm(e) { if (!e?.completed) return 0; return e.kmDone!=null?e.kmDone:(e.km||0); }
 function plannedKm(e) { return e?.km||0; }
+// Fixed original-plan distance — set once in buildDefaultPlan and never edited by any
+// user action, so weekly/monthly planned totals stay constant even after a session is
+// swapped to a non-running workout. Falls back to km for entries without the field.
+function origKm(e) { return e?.plannedKm!=null?e.plannedKm:(e?.km||0); }
 
 // ─── Workout tips ─────────────────────────────────────────────────────────────
 const TIPS = {
@@ -216,6 +220,157 @@ const FEELINGS = [
   { value:5, emoji:"🔥", label:"Flying" },
 ];
 
+// ─── Milestone celebrations ─────────────────────────────────────────────────────
+// Shown once each (a `milestone-<id>` localStorage flag prevents repeats) when a run
+// is logged. check(entry, totalKm, allEntries) → boolean; entry is the just-logged
+// run, allEntries is every completed run ({...entry, date}). One fires per log.
+const MILESTONES = [
+  // Session milestones
+  { id: 'first-run',
+    check: (entry, total, allEntries) =>
+      allEntries.filter(e => e.completed && e.kmDone).length === 1,
+    emoji: '🏃', title: 'First run logged!',
+    message: "Every marathon starts with a single run. This is yours." },
+
+  { id: 'first-long-run',
+    check: (entry) => entry.kmDone >= 16,
+    emoji: '💪', title: 'First long run!',
+    message: "This is where marathon runners are made. Welcome to the long game." },
+
+  { id: 'first-20k',
+    check: (entry) => entry.kmDone >= 20,
+    emoji: '🎯', title: '20km done!',
+    message: "20km. Your body just learned something it won't forget." },
+
+  { id: 'first-25k',
+    check: (entry) => entry.kmDone >= 25,
+    emoji: '🔥', title: '25km — new territory!',
+    message: "You're running distances most people never will. Keep going." },
+
+  { id: 'first-30k',
+    check: (entry) => entry.kmDone >= 30,
+    emoji: '⚡', title: '30km. Seriously.',
+    message: "The marathon is just 12km more from here. You've got this." },
+
+  { id: 'first-tempo',
+    check: (entry, total, allEntries) =>
+      entry.workout?.toLowerCase().includes('tempo') &&
+      allEntries.filter(e => e.completed && e.workout?.toLowerCase().includes('tempo')).length === 1,
+    emoji: '⚡', title: 'First tempo run!',
+    message: "Today you pushed for the first time. This is how you get faster." },
+
+  { id: 'first-track',
+    check: (entry, total, allEntries) =>
+      entry.workout?.toLowerCase().includes('track') &&
+      allEntries.filter(e => e.completed && e.workout?.toLowerCase().includes('track')).length === 1,
+    emoji: '🏟️', title: 'First track session!',
+    message: "Speed work done. Your legs just found another gear." },
+
+  { id: 'first-gel-test',
+    check: (entry, total, allEntries) =>
+      entry.workout?.toLowerCase().includes('test gels') &&
+      allEntries.filter(e => e.completed && e.workout?.toLowerCase().includes('test gels')).length === 1,
+    emoji: '🧃', title: 'First gel test!',
+    message: "Race nutrition sorted. One less thing to worry about on race day." },
+
+  { id: 'first-deload-run',
+    check: (entry, total, allEntries) => {
+      const completedRuns = allEntries.filter(e => e.completed && e.kmDone);
+      // Trigger on first run after a gap of 2+ days with no runs (deload pattern)
+      return completedRuns.length > 3 && entry.kmDone <= 10;
+    },
+    emoji: '🔄', title: 'Back after recovery!',
+    message: "Your body absorbed the work. Now we build again." },
+
+  { id: 'personal-longest',
+    check: (entry, total, allEntries) => {
+      const prevMax = Math.max(0, ...allEntries
+        .filter(e => e.completed && e.kmDone && e !== entry)
+        .map(e => e.kmDone));
+      return entry.kmDone > prevMax && entry.kmDone >= 10;
+    },
+    emoji: '📈', title: 'Longest run ever!',
+    message: "Further than you've ever gone. That's the whole point." },
+
+  { id: 'last-long-run',
+    check: (entry, total, allEntries) => {
+      // Longest run in taper phase — run over 20km after week 12
+      const completedRuns = allEntries.filter(e => e.completed && e.kmDone);
+      return entry.kmDone >= 20 && completedRuns.length >= 40;
+    },
+    emoji: '🎒', title: 'Last long one.',
+    message: "The hay is in the barn. Trust what you've built." },
+
+  { id: 'shake-out-jog',
+    check: (entry) =>
+      entry.workout?.toLowerCase().includes('shake-out'),
+    emoji: '🌅', title: 'Race eve shake-out done.',
+    message: "Tomorrow is race day. You are ready. Go get some sleep." },
+
+  // Consistency milestones
+  { id: 'runs-10',
+    check: (entry, total, allEntries) =>
+      allEntries.filter(e => e.completed && e.kmDone).length === 10,
+    emoji: '🔟', title: '10 runs done!',
+    message: "10 runs. It's not a phase anymore — it's a habit." },
+
+  { id: 'runs-25',
+    check: (entry, total, allEntries) =>
+      allEntries.filter(e => e.completed && e.kmDone).length === 25,
+    emoji: '🏅', title: '25 runs logged!',
+    message: "25 runs deep. You're doing what most people only talk about." },
+
+  { id: 'week-one-complete',
+    check: (entry, total, allEntries) => {
+      // All planned runs in week 1 completed
+      const week1Runs = allEntries.filter(e =>
+        e.completed && e.kmDone &&
+        e.date >= '2026-06-29' && e.date <= '2026-07-05'
+      );
+      return week1Runs.length >= 3;
+    },
+    emoji: '🗓️', title: 'Week 1 complete!',
+    message: "First week done. The hardest part was starting. You started." },
+
+  { id: 'four-weeks',
+    check: (entry, total, allEntries) =>
+      allEntries.filter(e => e.completed && e.kmDone).length === 20,
+    emoji: '📅', title: 'One month of training!',
+    message: "Four weeks in. Your body is different from when you started." },
+
+  { id: 'halfway',
+    check: (entry, total, allEntries) =>
+      allEntries.filter(e => e.completed && e.kmDone).length === 35,
+    emoji: '🏁', title: 'Halfway through the plan!',
+    message: "8 weeks down, 8 to go. The hard work is just beginning — and you're ready for it." },
+
+  // Cumulative km milestones
+  { id: 'total-50k',
+    check: (entry, total) => total >= 50,
+    emoji: '🎉', title: '50km total!',
+    message: "50km in the bank. Your body is adapting. Keep building." },
+
+  { id: 'total-100k',
+    check: (entry, total) => total >= 100,
+    emoji: '💯', title: '100km logged!',
+    message: "100km. That's not motivation anymore — that's proof." },
+
+  { id: 'total-200k',
+    check: (entry, total) => total >= 200,
+    emoji: '🚀', title: '200km — halfway there!',
+    message: "200km of training in your legs. The marathon won't know what hit it." },
+
+  { id: 'total-300k',
+    check: (entry, total) => total >= 300,
+    emoji: '🏔️', title: '300km. Elite territory.',
+    message: "Most people never run 300km in their life. You did it in one training block." },
+
+  { id: 'total-500k',
+    check: (entry, total) => total >= 500,
+    emoji: '🌟', title: '500km logged!',
+    message: "500km. You are ready. You just don't know it yet." },
+];
+
 // ─── 17-week plan (race Sun 25 Oct 2026) ─────────────────────────────────────
 const PLAN_WEEKS = [
   // Week 1 (Jun 29) — Phase 1: Base
@@ -256,13 +411,13 @@ const PLAN_WEEKS = [
 
 function buildDefaultPlan() {
   const plan = {};
-  plan['2026-06-26'] = { workout:'Easy run', km:6 };
-  plan['2026-06-27'] = { workout:'Long run', km:14 };
-  plan['2026-06-28'] = { workout:'Yoga', km:null };
+  plan['2026-06-26'] = { workout:'Easy run', km:6, plannedKm:6 };
+  plan['2026-06-27'] = { workout:'Long run', km:14, plannedKm:14 };
+  plan['2026-06-28'] = { workout:'Yoga', km:null, plannedKm:null };
   PLAN_WEEKS.forEach((week,wi)=>{
     week.forEach((day,di)=>{
       const d=new Date(2026,5,29); d.setDate(d.getDate()+wi*7+di);
-      if (day&&day[0]) plan[dateKey(d)]={ workout:day[0], km:day[1] };
+      if (day&&day[0]) plan[dateKey(d)]={ workout:day[0], km:day[1], plannedKm:day[1] };
     });
   });
   return plan;
@@ -373,8 +528,8 @@ function SetupScreen({initName,initAthlete,isEdit,onBack,onSave}) {
     Object.keys(localStorage).filter(k=>k.startsWith('coach-')).forEach(k=>{ coach[k]=localStorage.getItem(k); });
     const data={
       exportedAt:new Date().toISOString(),
-      version:'marathon-v8',
-      plan:localStorage.getItem('marathon-v8'),
+      version:SK,
+      plan:localStorage.getItem(SK),
       coach,
     };
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
@@ -408,7 +563,7 @@ function SetupScreen({initName,initAthlete,isEdit,onBack,onSave}) {
     const d=pendingImport;
     if (!d) return;
     try {
-      localStorage.setItem('marathon-v8', typeof d.plan==='string'?d.plan:JSON.stringify(d.plan));
+      localStorage.setItem(SK, typeof d.plan==='string'?d.plan:JSON.stringify(d.plan));
       if (d.coach&&typeof d.coach==='object') {
         Object.keys(d.coach).forEach(k=>{ if (k.startsWith('coach-')) localStorage.setItem(k, d.coach[k]); });
       }
@@ -693,6 +848,96 @@ function useSwipe(onLeft, onRight) {
   };
 }
 
+// ─── Workout bottom sheet ───────────────────────────────────────────────────────
+// "What are you doing today?" grid, shared by Today and Week views. Operates on a
+// single dateKey: Run opens the editor, Rest clears the day, Other prompts for free
+// text, everything else stores "<emoji> <label>".
+function WorkoutSheet({dateKey:dk,entry,updDay,onEdit,onClose}) {
+  const e=entry||{};
+  const [otherMode,setOtherMode]=useState(false);
+  const [otherText,setOtherText]=useState("");
+  const confirmOther=()=>{
+    const t=otherText.trim();
+    if (!t) return;
+    updDay(dk,{workout:`⋯ ${t}`,km:null,kmDone:null,completed:false});
+    onClose();
+  };
+  const onSheetOption=(opt)=>{
+    if (opt.action==="other") { setOtherMode(true); return; }   // ask what they're doing
+    if (opt.action==="run") {
+      // From a non-running session (matches an ALTS label, or has no km) open the
+      // editor with a clean Easy-run default; an existing run is edited as-is.
+      const w=(e.workout||"").toLowerCase();
+      const isNonRunning=ALTS.some(a=>w.includes(a.label.toLowerCase()))||!(e.km>0);
+      onEdit(dk, isNonRunning?{workout:'Easy run',km:8,kmDone:null,completed:false,notes:''}:undefined, true);
+      onClose();
+      return;
+    }
+    if (opt.action==="rest") { updDay(dk,{workout:'',km:null,kmDone:null,completed:false}); onClose(); return; }
+    updDay(dk,{workout:`${opt.emoji} ${opt.label}`,km:null,kmDone:null,completed:false});
+    onClose();
+  };
+  return (
+    <>
+      <div onClick={onClose}
+        style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:50,
+          WebkitTapHighlightColor:"transparent"}}/>
+      <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:51,
+        maxWidth:480,margin:"0 auto",background:C.surface,
+        borderRadius:"20px 20px 0 0",boxShadow:"0 -8px 30px rgba(0,0,0,0.18)",
+        padding:"8px 16px calc(20px + env(safe-area-inset-bottom))",
+        animation:"sheetUp .25s ease-out"}}>
+        <style>{"@keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}"}</style>
+        {/* Tappable grab handle — tap (or tap outside) to dismiss. */}
+        <button onClick={onClose} aria-label="Close"
+          style={{display:"block",width:"100%",background:"none",border:"none",
+            cursor:"pointer",padding:"6px 0 14px",WebkitTapHighlightColor:"transparent"}}>
+          <div style={{width:40,height:5,borderRadius:3,background:C.borderSt,margin:"0 auto"}}/>
+        </button>
+
+        {otherMode ? (
+          <>
+            <div style={{fontSize:16,fontWeight:600,color:C.text,margin:"4px 4px 16px"}}>
+              What are you doing?
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <input autoFocus value={otherText} onChange={ev=>setOtherText(ev.target.value)}
+                onKeyDown={ev=>{ if(ev.key==="Enter") confirmOther(); }}
+                placeholder="e.g. Hike, Swimming, Football"
+                style={{flex:1,border:`1px solid ${C.border}`,borderRadius:12,
+                  padding:"13px 15px",fontFamily:"inherit",fontSize:16,color:C.text,
+                  background:C.bg,outline:"none",boxSizing:"border-box",WebkitAppearance:"none"}}/>
+              <button onClick={confirmOther} disabled={!otherText.trim()}
+                style={{flexShrink:0,padding:"0 20px",background:otherText.trim()?C.sage:C.subtle,
+                  color:"#fff",border:"none",borderRadius:12,fontFamily:"inherit",fontSize:15,
+                  fontWeight:600,cursor:otherText.trim()?"pointer":"default",
+                  WebkitTapHighlightColor:"transparent"}}>Confirm</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{fontSize:16,fontWeight:600,color:C.text,margin:"4px 4px 16px"}}>
+              What are you doing today?
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+              {SHEET_OPTIONS.map(opt=>(
+                <button key={opt.action} onClick={()=>onSheetOption(opt)}
+                  style={{display:"flex",flexDirection:"column",alignItems:"center",
+                    justifyContent:"center",gap:5,minHeight:64,padding:"12px 4px",
+                    background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,
+                    cursor:"pointer",fontFamily:"inherit",WebkitTapHighlightColor:"transparent"}}>
+                  <span style={{fontSize:24,lineHeight:1}}>{opt.emoji}</span>
+                  <span style={{fontSize:11,color:C.muted,textAlign:"center",lineHeight:1.15}}>{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
 function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
   const viewKey=offsetDate(dayOff);
   const e=plan[viewKey]||{};
@@ -700,8 +945,6 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
   const [editingKm,setEditingKm]=useState(false);
   const [kmInput,setKmInput]=useState("");
   const [sheetOpen,setSheetOpen]=useState(false);   // swap-arrows change-workout sheet
-  const [otherMode,setOtherMode]=useState(false);   // "Other" free-text prompt in the sheet
-  const [otherText,setOtherText]=useState("");
   const [direction,setDirection]=useState(null);    // 'left' | 'right' — day-slide direction
   const [animating,setAnimating]=useState(false);   // day-change slide in progress
   const [notesOpen,setNotesOpen]=useState(false);   // notes textarea expanded for editing
@@ -745,36 +988,12 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
   const ran=actualKm(e);
 
   const wk=weekOf(0);
-  const wkTarget=wk.reduce((s,dk)=>s+plannedKm(plan[dk]),0);
+  const wkTarget=wk.reduce((s,dk)=>s+origKm(plan[dk]),0);
   const wkDone=wk.reduce((s,dk)=>s+actualKm(plan[dk]),0);
   const now=new Date();
   const mDays=monthGrid(now.getFullYear(),now.getMonth()).filter(Boolean);
-  const mTarget=mDays.reduce((s,dk)=>s+plannedKm(plan[dk]),0);
+  const mTarget=mDays.reduce((s,dk)=>s+origKm(plan[dk]),0);
   const mDone=mDays.reduce((s,dk)=>s+actualKm(plan[dk]),0);
-
-  // ⋯ sheet option handler: Run opens the editor, Rest clears the day,
-  // everything else sets the workout to "<emoji> <label>".
-  const closeSheet=()=>{ setSheetOpen(false); setOtherMode(false); setOtherText(""); };
-  const confirmOther=()=>{
-    const t=otherText.trim();
-    if (!t) return;
-    updDay(viewKey,{workout:`⋯ ${t}`,km:null,kmDone:null,completed:false});
-    closeSheet();
-  };
-  const onSheetOption=(opt)=>{
-    if (opt.action==="other") { setOtherMode(true); return; }   // ask what they're doing
-    setSheetOpen(false);
-    if (opt.action==="run") {
-      // From a non-running session (matches an ALTS label, or has no km) open the
-      // editor with a clean Easy-run default; an existing run is edited as-is.
-      const w=(e.workout||"").toLowerCase();
-      const isNonRunning=ALTS.some(a=>w.includes(a.label.toLowerCase()))||!(e.km>0);
-      onEdit(viewKey, isNonRunning?{workout:'Easy run',km:8,kmDone:null,completed:false,notes:''}:undefined, true);
-      return;
-    }
-    if (opt.action==="rest") { updDay(viewKey,{workout:'',km:null,kmDone:null,completed:false}); return; }
-    updDay(viewKey,{workout:`${opt.emoji} ${opt.label}`,km:null,kmDone:null,completed:false});
-  };
 
   return (
     <div {...swipe} style={{padding:"16px 16px 24px"}}>
@@ -1051,78 +1270,26 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
 
       {/* ⋯ Edit-actions bottom sheet */}
       {sheetOpen&&(
-        <>
-          <div onClick={closeSheet}
-            style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:50,
-              WebkitTapHighlightColor:"transparent"}}/>
-          <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:51,
-            maxWidth:480,margin:"0 auto",background:C.surface,
-            borderRadius:"20px 20px 0 0",boxShadow:"0 -8px 30px rgba(0,0,0,0.18)",
-            padding:"8px 16px calc(20px + env(safe-area-inset-bottom))",
-            animation:"sheetUp .25s ease-out"}}>
-            <style>{"@keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}"}</style>
-            {/* Tappable grab handle — tap (or tap outside) to dismiss. */}
-            <button onClick={closeSheet} aria-label="Close"
-              style={{display:"block",width:"100%",background:"none",border:"none",
-                cursor:"pointer",padding:"6px 0 14px",WebkitTapHighlightColor:"transparent"}}>
-              <div style={{width:40,height:5,borderRadius:3,background:C.borderSt,margin:"0 auto"}}/>
-            </button>
-
-            {otherMode ? (
-              <>
-                <div style={{fontSize:16,fontWeight:600,color:C.text,margin:"4px 4px 16px"}}>
-                  What are you doing?
-                </div>
-                <div style={{display:"flex",gap:10}}>
-                  <input autoFocus value={otherText} onChange={ev=>setOtherText(ev.target.value)}
-                    onKeyDown={ev=>{ if(ev.key==="Enter") confirmOther(); }}
-                    placeholder="e.g. Hike, Swimming, Football"
-                    style={{flex:1,border:`1px solid ${C.border}`,borderRadius:12,
-                      padding:"13px 15px",fontFamily:"inherit",fontSize:16,color:C.text,
-                      background:C.bg,outline:"none",boxSizing:"border-box",WebkitAppearance:"none"}}/>
-                  <button onClick={confirmOther} disabled={!otherText.trim()}
-                    style={{flexShrink:0,padding:"0 20px",background:otherText.trim()?C.sage:C.subtle,
-                      color:"#fff",border:"none",borderRadius:12,fontFamily:"inherit",fontSize:15,
-                      fontWeight:600,cursor:otherText.trim()?"pointer":"default",
-                      WebkitTapHighlightColor:"transparent"}}>Confirm</button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div style={{fontSize:16,fontWeight:600,color:C.text,margin:"4px 4px 16px"}}>
-                  What are you doing today?
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
-                  {SHEET_OPTIONS.map(opt=>(
-                    <button key={opt.action} onClick={()=>onSheetOption(opt)}
-                      style={{display:"flex",flexDirection:"column",alignItems:"center",
-                        justifyContent:"center",gap:5,minHeight:64,padding:"12px 4px",
-                        background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,
-                        cursor:"pointer",fontFamily:"inherit",WebkitTapHighlightColor:"transparent"}}>
-                      <span style={{fontSize:24,lineHeight:1}}>{opt.emoji}</span>
-                      <span style={{fontSize:11,color:C.muted,textAlign:"center",lineHeight:1.15}}>{opt.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </>
+        <WorkoutSheet dateKey={viewKey} entry={e} updDay={updDay} onEdit={onEdit}
+          onClose={()=>setSheetOpen(false)}/>
       )}
     </div>
   );
 }
 
 // ─── Week view ────────────────────────────────────────────────────────────────
-function WeekView({today,plan,wkOff,setWkOff,onGoToDay}) {
+function WeekView({today,plan,wkOff,setWkOff,onGoToDay,updDay,onEdit,onSwapDays}) {
   const days=weekOf(wkOff);
   const fmt=dk=>new Date(dk+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});
-  const wkTarget=days.reduce((s,dk)=>s+plannedKm(plan[dk]),0);
+  const wkTarget=days.reduce((s,dk)=>s+origKm(plan[dk]),0);
   const wkDone=days.reduce((s,dk)=>s+actualKm(plan[dk]),0);
   const [direction,setDirection]=useState(null);   // 'left' | 'right' — week-slide direction
   const [animating,setAnimating]=useState(false);
+  const [sheetDk,setSheetDk]=useState(null);        // day whose change-workout sheet is open
+  const [swapFrom,setSwapFrom]=useState(null);      // first day picked for a two-day swap
   const navWeek=(delta)=>{
     // Next week → content enters from the right (slideInLeft); previous → from the left (slideInRight).
+    setSwapFrom(null);
     setDirection(delta>0?'left':'right');
     setWkOff(w=>w+delta);
     setAnimating(true);
@@ -1130,8 +1297,18 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay}) {
   };
   const swipe=useSwipe(()=>navWeek(1),()=>navWeek(-1));
 
+  // Tap a day card to swap: first tap selects, second tap on a different day exchanges
+  // their workout/km (logged data stays with its date), tapping the same day cancels.
+  const onCardTap=(dk)=>{
+    if (swapFrom===null) setSwapFrom(dk);
+    else if (swapFrom===dk) setSwapFrom(null);
+    else { onSwapDays(swapFrom,dk); setSwapFrom(null); }
+  };
+  const openSheet=(dk)=>{ setSwapFrom(null); setSheetDk(dk); };
+
   return (
-    <div {...swipe} style={{padding:"16px 16px 0"}}>
+    <div {...swipe} onClick={()=>{ if(swapFrom!==null) setSwapFrom(null); }}
+      style={{padding:"16px 16px 0"}}>
       <style>{"@keyframes slideInLeft{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes slideInRight{from{transform:translateX(-100%);opacity:0}to{transform:translateX(0);opacity:1}}"}</style>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
         <NavArrow onClick={()=>navWeek(-1)} dir="left"/>
@@ -1156,6 +1333,18 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay}) {
         </div>
         <NavArrow onClick={()=>navWeek(1)} dir="right"/>
       </div>
+
+      {/* Swap-mode banner — hint + cancel pill, shown while a day is selected */}
+      {swapFrom!==null&&(
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,
+          marginBottom:14,padding:"10px 14px",background:C.sageLt,borderRadius:12}}>
+          <span style={{fontSize:13,fontWeight:600,color:C.sageDk}}>Tap another day to swap workouts</span>
+          <button onClick={(ev)=>{ ev.stopPropagation(); setSwapFrom(null); }}
+            style={{flexShrink:0,fontSize:12,fontWeight:700,color:C.muted,background:C.surface,
+              border:`1px solid ${C.border}`,borderRadius:20,padding:"5px 12px",cursor:"pointer",
+              WebkitTapHighlightColor:"transparent"}}>✕ Cancel swap</button>
+        </div>
+      )}
 
       {/* Animated content — strip + day list slide on week change; nav row stays fixed. */}
       <div style={{overflow:"hidden"}}>
@@ -1189,24 +1378,26 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay}) {
         })}
       </div>
 
-      {/* Day list */}
+      {/* Day list — tap a card to pick it for a swap; ⇅ opens the change-workout sheet */}
       {days.map((dk,i)=>{
         const e=plan[dk]||{};
         const isT=dk===today;
         const d=new Date(dk+"T00:00:00");
         const target=plannedKm(e);
         const ran=actualKm(e);
+        const picked=swapFrom===dk;
         return (
-          <button key={dk} onClick={()=>onGoToDay(dk)}
-            aria-label={`${DN[i]}, ${d.toLocaleDateString("en-US",{month:"short",day:"numeric"})} — ${e.workout?.trim()||"Rest"}`}
-            style={{
-            display:"block",width:"100%",textAlign:"left",fontFamily:"inherit",
-            background:e.completed?C.doneLt:C.surface,
-            border:`1px solid ${e.completed?C.done:C.border}`,
-            borderRadius:16,padding:"14px 18px",marginBottom:10,cursor:"pointer",
-            WebkitTapHighlightColor:"transparent"}}>
-            <div style={{display:"flex",justifyContent:"space-between",
-              alignItems:"center",gap:10}}>
+          <div key={dk} style={{
+            background:picked?C.sageLt:e.completed?C.doneLt:C.surface,
+            border:`${picked?2:1}px solid ${picked?C.sage:e.completed?C.done:C.border}`,
+            borderRadius:16,padding:"14px 18px",marginBottom:10,
+            display:"flex",alignItems:"center",gap:8}}>
+            <button onClick={(ev)=>{ ev.stopPropagation(); onCardTap(dk); }}
+              aria-label={`${DN[i]}, ${d.toLocaleDateString("en-US",{month:"short",day:"numeric"})} — ${e.workout?.trim()||"Rest"}${picked?" (selected — tap another day to swap)":""}`}
+              style={{flex:1,minWidth:0,display:"flex",justifyContent:"space-between",
+                alignItems:"center",gap:10,background:"none",border:"none",padding:0,
+                textAlign:"left",fontFamily:"inherit",cursor:"pointer",
+                WebkitTapHighlightColor:"transparent"}}>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:".07em",
                   color:isT?C.sageDk:C.muted,fontWeight:isT?700:400,marginBottom:4}}>
@@ -1230,20 +1421,37 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay}) {
                   )}
                 </div>
               )}
-              {/* Passive completion-status indicator (the whole row opens edit). */}
-              <div style={{width:24,display:"flex",justifyContent:"center",
+              {/* Passive completion-status indicator. */}
+              <div style={{width:22,display:"flex",justifyContent:"center",
                 alignItems:"center",flexShrink:0}}>
                 {e.completed
                   ? <div style={{width:22,height:22,borderRadius:"50%",background:C.done,
                       display:"flex",alignItems:"center",justifyContent:"center"}}><Chk size={12}/></div>
                   : <div style={{width:8,height:8,borderRadius:"50%",background:C.border}}/>}
               </div>
-            </div>
-          </button>
+            </button>
+            {/* ⇅ change workout — opens the same bottom sheet as the Today view */}
+            <button onClick={(ev)=>{ ev.stopPropagation(); openSheet(dk); }}
+              aria-label="Change workout"
+              style={{width:40,height:40,flexShrink:0,border:"none",background:"transparent",
+                color:C.muted,cursor:"pointer",display:"flex",alignItems:"center",
+                justifyContent:"center",WebkitTapHighlightColor:"transparent"}}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7 16V4m0 0L3 8m4-4l4 4"/>
+                <path d="M17 8v12m0 0l4-4m-4 4l-4-4"/>
+              </svg>
+            </button>
+          </div>
         );
       })}
       </div>{/* /week-slide */}
       </div>{/* /overflow */}
+
+      {sheetDk&&(
+        <WorkoutSheet dateKey={sheetDk} entry={plan[sheetDk]||{}} updDay={updDay} onEdit={onEdit}
+          onClose={()=>setSheetDk(null)}/>
+      )}
     </div>
   );
 }
@@ -1254,7 +1462,7 @@ function MonthView({today,plan,moOff,setMoOff,onGoToDay}) {
   const t=new Date(now.getFullYear(),now.getMonth()+moOff,1);
   const y=t.getFullYear(), m=t.getMonth();
   const days=monthGrid(y,m);
-  const mTarget=days.filter(Boolean).reduce((s,dk)=>s+plannedKm(plan[dk]),0);
+  const mTarget=days.filter(Boolean).reduce((s,dk)=>s+origKm(plan[dk]),0);
   const mDone=days.filter(Boolean).reduce((s,dk)=>s+actualKm(plan[dk]),0);
   const [direction,setDirection]=useState(null);   // 'left' | 'right' — month-slide direction
   const [animating,setAnimating]=useState(false);
@@ -1365,9 +1573,9 @@ function JourneyView({plan,today,raceDate,onGoToWeek}) {
 
   const weekStats=(N)=>{
     const entries=weekDays(N).map(dk=>plan[dk]||{});
-    const planned=entries.reduce((s,e)=>s+plannedKm(e),0);
+    const planned=entries.reduce((s,e)=>s+origKm(e),0);
     const done=entries.reduce((s,e)=>s+actualKm(e),0);
-    const longRun=entries.reduce((mx,e)=>Math.max(mx,plannedKm(e)),0);
+    const longRun=entries.reduce((mx,e)=>Math.max(mx,origKm(e)),0);
     const started=entries.some(e=>e.completed);   // any session in the week completed
     return {planned,done,longRun,started};
   };
@@ -1471,11 +1679,11 @@ function CoachScreen({viewKey,plan,athleteName,raceName,raceDate,startDate,onBac
   const dayFull=d.toLocaleDateString("en-US",{month:"long",day:"numeric"});
   const target=plannedKm(e), ran=actualKm(e);
   const wk=weekOf(0);
-  const wkTarget=wk.reduce((s,dk)=>s+plannedKm(plan[dk]),0);
+  const wkTarget=wk.reduce((s,dk)=>s+origKm(plan[dk]),0);
   const wkDone=wk.reduce((s,dk)=>s+actualKm(plan[dk]),0);
   const now=new Date();
   const mDays=monthGrid(now.getFullYear(),now.getMonth()).filter(Boolean);
-  const mTarget=mDays.reduce((s,dk)=>s+plannedKm(plan[dk]),0);
+  const mTarget=mDays.reduce((s,dk)=>s+origKm(plan[dk]),0);
   const mDone=mDays.reduce((s,dk)=>s+actualKm(plan[dk]),0);
   const feelingLabel=(v)=>FEELINGS.find(f=>f.value===v)?.label||null;
   const feelingEmoji=(v)=>FEELINGS.find(f=>f.value===v)?.emoji||null;
@@ -1629,6 +1837,7 @@ export default function App() {
   const [moOff,setMoOff]=useState(0);
   const [dayOff,setDayOff]=useState(0);   // which day the Today view shows (offset from today)
   const [restoredToast,setRestoredToast]=useState(false);   // brief "Backup restored" confirmation after import
+  const [celebration,setCelebration]=useState(null);        // milestone overlay: {emoji,title,message} | null
 
   useEffect(()=>{
     (async()=>{
@@ -1665,7 +1874,7 @@ export default function App() {
     if (document.getElementById("a11y-global-style")) return;
     const s=document.createElement("style");
     s.id="a11y-global-style";
-    s.textContent="@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;scroll-behavior:auto !important}}:focus-visible{outline:2px solid #8B9E8A !important;outline-offset:2px !important}";
+    s.textContent="@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;scroll-behavior:auto !important}}:focus-visible{outline:2px solid #8B9E8A !important;outline-offset:2px !important}@keyframes celebFadeIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}";
     document.head.appendChild(s);
   },[]);
 
@@ -1679,11 +1888,54 @@ export default function App() {
     const t=setTimeout(()=>setRestoredToast(false),3200);
     return ()=>clearTimeout(t);
   },[restoredToast]);
+  // Auto-dismiss the milestone overlay after 4s (tap also dismisses).
+  useEffect(()=>{
+    if (!celebration) return;
+    const t=setTimeout(()=>setCelebration(null),4000);
+    return ()=>clearTimeout(t);
+  },[celebration]);
+
+  // After a run is logged, fire the first not-yet-shown milestone whose check passes.
+  // Reads the just-updated plan so the new run is counted; entry is its copy so the
+  // personal-longest reference check excludes it correctly. One celebration at a time.
+  const checkMilestones=(dateKey,planState)=>{
+    const allEntries=Object.entries(planState)
+      .filter(([k,e])=>e.completed&&e.kmDone)
+      .map(([k,e])=>({...e,date:k}));
+    const entry=allEntries.find(e=>e.date===dateKey);
+    if (!entry) return;
+    const totalKm=allEntries.reduce((sum,e)=>sum+(e.kmDone||0),0);
+    for (const m of MILESTONES) {
+      const sk=`milestone-${m.id}`;
+      let already=false;
+      try { already=!!localStorage.getItem(sk); } catch {}
+      if (already) continue;
+      if (m.check(entry,totalKm,allEntries)) {
+        try { localStorage.setItem(sk,'true'); } catch {}
+        setCelebration({emoji:m.emoji,title:m.title,message:m.message});
+        break;
+      }
+    }
+  };
 
   const save=(np,nn,nr,ns,na)=>storeSet(SK,JSON.stringify({
     name:nn??name,athleteName:na??athleteName,raceDate:nr??raceDate,startDate:ns??startDate,plan:np??plan
   })).catch(()=>{});
-  const updDay=(dk,u)=>{ const np={...plan,[dk]:{...plan[dk],...u}}; setPlan(np); save(np); };
+  const updDay=(dk,u)=>{
+    const np={...plan,[dk]:{...plan[dk],...u}}; setPlan(np); save(np);
+    // Only running sessions celebrate — completed with a logged distance.
+    if (u.completed===true&&np[dk]?.kmDone>0) checkMilestones(dk,np);
+  };
+  // Swap two days' plan (workout/km/plannedKm) in a single atomic update — two
+  // sequential updDay calls would each read the same stale `plan` and clobber one
+  // change. Logged data (kmDone/completed/feeling/notes) stays with its own date.
+  const swapDays=(a,b)=>{
+    const ea=plan[a]||{}, eb=plan[b]||{};
+    const np={...plan,
+      [a]:{...plan[a],workout:eb.workout||'',km:eb.km??null,plannedKm:eb.plannedKm??null},
+      [b]:{...plan[b],workout:ea.workout||'',km:ea.km??null,plannedKm:ea.plannedKm??null}};
+    setPlan(np); save(np);
+  };
   const openEdit=(dk,entryOverride,isRun)=>{ setEditKey(dk); setEditEntry(entryOverride||null); setEditIsRun(!!isRun); setScreen("editday"); };
   // Tapping a day in Week/Month jumps to that day in the Today view.
   const goToDay=(dk)=>{ setDayOff(daysUntil(dk)??0); setView("today"); };
@@ -1704,7 +1956,7 @@ export default function App() {
   const totalDone=allE.filter(e=>e.completed).length;
   const pct=totalPlanned>0?Math.round(totalDone/totalPlanned*100):0;
   const totalKmDone=allE.reduce((s,e)=>s+actualKm(e),0);
-  const totalKmPlanned=allE.reduce((s,e)=>s+plannedKm(e),0);
+  const totalKmPlanned=allE.reduce((s,e)=>s+origKm(e),0);
   const circ=2*Math.PI*30;
   const ringOff=dLeft!==null?circ*Math.max(0,Math.min(1,dLeft/totalDays)):circ;
   const raceCompleted=!!(raceDate&&plan[raceDate]?.completed);
@@ -1749,6 +2001,29 @@ export default function App() {
             padding:"10px 18px",borderRadius:99,display:"flex",alignItems:"center",gap:8,
             boxShadow:"0 4px 16px rgba(0,0,0,0.18)"}}>
             <Chk size={15}/> Backup restored
+          </div>
+        </div>
+      )}
+
+      {/* Milestone celebration overlay */}
+      {celebration && (
+        <div onClick={() => setCelebration(null)} style={{
+          position:'fixed', inset:0, zIndex:1000,
+          background:'rgba(139,158,138,0.92)',
+          display:'flex', flexDirection:'column',
+          alignItems:'center', justifyContent:'center',
+          padding:40, textAlign:'center',
+          animation:'celebFadeIn 0.3s ease'
+        }}>
+          <div style={{fontSize:72, marginBottom:24}}>{celebration.emoji}</div>
+          <div style={{fontSize:26, fontWeight:800, color:'#fff', marginBottom:16, lineHeight:1.2}}>
+            {celebration.title}
+          </div>
+          <div style={{fontSize:17, color:'rgba(255,255,255,0.85)', lineHeight:1.6, maxWidth:280}}>
+            {celebration.message}
+          </div>
+          <div style={{marginTop:40, fontSize:13, color:'rgba(255,255,255,0.6)'}}>
+            tap to continue
           </div>
         </div>
       )}
@@ -1840,7 +2115,7 @@ export default function App() {
 
       <div style={{paddingBottom:"calc(80px + env(safe-area-inset-bottom,0px))"}}>
         {view==="today"&&<TodayView plan={plan} updDay={updDay} onEdit={openEdit} dayOff={dayOff} setDayOff={setDayOff} onOpenCoach={()=>setScreen("coach")}/>}
-        {view==="week"&&<WeekView today={today} plan={plan} wkOff={wkOff} setWkOff={setWkOff} onGoToDay={goToDay}/>}
+        {view==="week"&&<WeekView today={today} plan={plan} wkOff={wkOff} setWkOff={setWkOff} onGoToDay={goToDay} updDay={updDay} onEdit={openEdit} onSwapDays={swapDays}/>}
         {view==="month"&&<MonthView today={today} plan={plan} moOff={moOff} setMoOff={setMoOff} onGoToDay={goToDay}/>}
         {view==="journey"&&<JourneyView plan={plan} today={today} raceDate={raceDate} onGoToWeek={goToWeek}/>}
       </div>
