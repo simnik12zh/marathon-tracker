@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 
-const SK = "marathon-v10";
+const SK = "marathon-v11";
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DL = ["M","T","W","T","F","S","S"];
 const DN = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
@@ -373,14 +373,14 @@ const MILESTONES = [
 
 // ─── 17-week plan (race Sun 25 Oct 2026) ─────────────────────────────────────
 const PLAN_WEEKS = [
-  // Week 1 (Jun 29) — Phase 1: Base
-  [['Pilates',null],['Easy run',8],['Strength',null],['Easy run',8],['Yoga',null],['Long run',16],['Easy recovery run',6]],
+  // Week 1 (Jun 29) — Phase 1: Base, conservative 20km running + structure
+  [['Pilates',null],['Easy run',6],['Strength',null],['Yoga',null],null,['Long run',14],['Yoga',null]],
   // Week 2 (Jul 6) — Ibiza Thu-Sun, reduced volume
   [['Pilates',null],['Easy run',8],['Easy run',8],['Easy run',5],['Yoga',null],['Easy run',6],null],
-  // Week 3 (Jul 13) — back from Ibiza Tue
-  [['Easy run',5],['Easy run',8],['Strength',null],['Easy run',10],['Yoga',null],['Long run',18],['Easy recovery run',6]],
+  // Week 3 (Jul 13) — back from Ibiza Tue, Long run 16km
+  [['Easy run',5],['Easy run',8],['Strength',null],['Easy run',10],['Yoga',null],['Long run',16],['Easy recovery run',6]],
   // Week 4 (Jul 20) — Deload
-  [['Yoga',null],['Easy run',7],['Pilates',null],['Easy run',8],null,['Long run',15],['Easy recovery run',6]],
+  [['Yoga',null],['Easy run',7],['Pilates',null],['Easy run',8],null,['Long run',14],['Easy recovery run',6]],
   // Week 5 (Jul 27) — Phase 2: Build
   [['Pilates',null],['Easy run',10],['Tempo run',10],['Strength',null],['Easy run',8],['Long run',20],['Easy recovery run',8]],
   // Week 6 (Aug 3) — Build
@@ -389,22 +389,22 @@ const PLAN_WEEKS = [
   [['Pilates',null],['Easy run',10],['Tempo run',12],['Yoga',null],['Easy run',8],['Long run',24],['Easy recovery run',8]],
   // Week 8 (Aug 17) — last hard week before Tuscany
   [['Pilates',null],['Easy run',10],['Track session – 8×1km',14],['Strength',null],['Easy run',8],['Long run',26],['Easy recovery run',8]],
-  // Week 9 (Aug 24) — Tuscany Week 1: cycling heavy
-  [['Cycling',null],['Easy run',6],['Cycling',null],['Easy run',6],['Yoga',null],['Cycling',null],['Easy run',8]],
-  // Week 10 (Aug 31) — Tuscany Week 2: full rest
-  [['Walking',null],['Yoga',null],['Walking',null],['Yoga',null],null,null,null],
-  // Week 11 (Sep 7) — Phase 3: Peak, comeback week
-  [['Pilates',null],['Easy run',10],['Tempo run',12],['Strength',null],['Easy run',8],['Long run – test gels',28],['Easy recovery run',10]],
-  // Week 12 (Sep 14) — Peak
-  [['Pilates',null],['Easy run',10],['Track session – 8×1km',14],['Yoga',null],['Easy run',8],['Long run – test gels',30],['Easy recovery run',10]],
-  // Week 13 (Sep 21) — TRUE PEAK WEEK
-  [['Strength',null],['Easy run',10],['Tempo run',14],['Pilates',null],['Easy run',8],['Long run – test gels',32],['Easy recovery run',10]],
-  // Week 14 (Sep 28) — Deload
+  // Week 9 (Aug 24) — Tuscany Week 1: normal training, max 22km long run
+  [['Pilates',null],['Easy run',8],['Yoga',null],['Easy run',8],['Easy run',6],['Long run',22],['Easy recovery run',6]],
+  // Week 10 (Aug 31) — Tuscany Week 2: light running only
+  [null,['Easy run',6],null,['Easy run',6],null,['Easy run',8],null],
+  // Week 11 (Sep 7) — comeback, controlled return
+  [['Pilates',null],['Easy run',10],['Tempo run',10],['Strength',null],['Easy run',8],['Long run',24],['Easy recovery run',8]],
+  // Week 12 (Sep 14) — Peak building
+  [['Pilates',null],['Easy run',10],['Track session – 8×1km',14],['Yoga',null],['Easy run',8],['Long run – test gels',28],['Easy recovery run',10]],
+  // Week 13 (Sep 21) — Peak
+  [['Strength',null],['Easy run',10],['Tempo run',12],['Pilates',null],['Easy run',8],['Long run – test gels',30],['Easy recovery run',10]],
+  // Week 14 (Sep 28) — TRUE PEAK WEEK
+  [['Pilates',null],['Easy run',10],['Track session – 8×1km',14],['Yoga',null],['Easy run',8],['Long run – test gels',32],['Easy recovery run',10]],
+  // Week 15 (Oct 5) — Deload / Taper begins
   [['Yoga',null],['Easy run',8],['Pilates',null],['Easy run',8],null,['Long run',20],['Easy recovery run',6]],
-  // Week 15 (Oct 5) — Taper begins
-  [['Pilates',null],['Easy run',8],['Sharpener – 5×1km',10],['Yoga',null],['Easy run',6],['Long run',16],['Easy recovery run',5]],
-  // Week 16 (Oct 12) — Deep taper
-  [['Yoga',null],['Easy run with strides',6],['Pilates',null],['Easy run',5],null,['Easy run',8],['Easy recovery run',4]],
+  // Week 16 (Oct 12) — Taper
+  [['Pilates',null],['Easy run',6],['Sharpener – 5×1km',8],['Yoga',null],['Easy run',5],['Easy run',10],['Easy recovery run',4]],
   // Week 17 (Oct 19) — Race week
   [['Pilates',null],['Easy jog with strides',5],['Easy jog',4],['Yoga',null],['Shake-out jog',3],null,['Marathon – Race Day',42.2]],
 ];
@@ -953,7 +953,8 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
   const [direction,setDirection]=useState(null);    // 'left' | 'right' — day-slide direction
   const [animating,setAnimating]=useState(false);   // day-change slide in progress
   const [notesOpen,setNotesOpen]=useState(false);   // notes textarea expanded for editing
-  useEffect(()=>{ setNotesOpen(false); },[viewKey]); // collapse the notes editor on day change
+  const [confirmUnlog,setConfirmUnlog]=useState(false);   // inline "remove log entry?" confirmation
+  useEffect(()=>{ setNotesOpen(false); setConfirmUnlog(false); },[viewKey]); // reset on day change
 
   const navDay=(delta)=>{
     setEditingKm(false); setSheetOpen(false);
@@ -966,6 +967,7 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
   };
   const swipe=useSwipe(()=>navDay(1),()=>navDay(-1));
   const completeRun=()=>updDay(viewKey,{completed:true,kmDone:e.km||0});
+  const handleUnlog=()=>{ updDay(viewKey,{completed:false,kmDone:null}); setConfirmUnlog(false); };
   const adjustKm=(delta)=>{
     const next=Math.max(0,parseFloat((ran+delta).toFixed(1)));
     updDay(viewKey,{kmDone:next});
@@ -1084,7 +1086,7 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
           </div>
           {/* No circle on genuine rest days — nothing to log. */}
           {e.workout?.trim()&&(e.completed
-            ? <button onClick={()=>updDay(viewKey,{completed:false,kmDone:null})}
+            ? <button onClick={()=>setConfirmUnlog(true)}
                 aria-label="Completed — tap to undo"
                 style={{width:64,height:64,borderRadius:"50%",border:"none",
                   background:C.done,cursor:"pointer",display:"flex",flexShrink:0,
@@ -1111,6 +1113,26 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
             </svg>
           </button>
         </div>
+
+        {/* Inline confirmation before removing a completed log */}
+        {confirmUnlog && (
+          <div style={{
+            display:'flex', alignItems:'center', gap:12,
+            padding:'10px 0', borderTop:`1px solid ${C.border}`
+          }}>
+            <span style={{fontSize:13, color:C.muted, flex:1}}>Remove this log entry?</span>
+            <button onClick={handleUnlog} style={{
+              fontSize:12, fontWeight:700, color:'#E8174A',
+              background:'none', border:'none', padding:'4px 8px',
+              cursor:'pointer', WebkitTapHighlightColor:'transparent'
+            }}>Remove</button>
+            <button onClick={() => setConfirmUnlog(false)} style={{
+              fontSize:12, fontWeight:600, color:C.muted,
+              background:'none', border:'none', padding:'4px 8px',
+              cursor:'pointer', WebkitTapHighlightColor:'transparent'
+            }}>Cancel</button>
+          </div>
+        )}
 
         {/* ── Tip ── */}
         <TipCard workout={e.workout}/>
@@ -1292,6 +1314,9 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay,updDay,onEdit,onSwapDays}
   const [animating,setAnimating]=useState(false);
   const [sheetDk,setSheetDk]=useState(null);        // day whose change-workout sheet is open
   const [swapFrom,setSwapFrom]=useState(null);      // first day picked for a two-day swap
+  const [swapConfirmed,setSwapConfirmed]=useState(null);  // [dkA,dkB] just-swapped — flash for 1.5s
+  const swapTimer=useRef(null);
+  useEffect(()=>()=>{ if (swapTimer.current) clearTimeout(swapTimer.current); },[]);
   const navWeek=(delta)=>{
     // Next week → content enters from the right (slideInLeft); previous → from the left (slideInRight).
     setSwapFrom(null);
@@ -1307,14 +1332,19 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay,updDay,onEdit,onSwapDays}
   const onCardTap=(dk)=>{
     if (swapFrom===null) setSwapFrom(dk);
     else if (swapFrom===dk) setSwapFrom(null);
-    else { onSwapDays(swapFrom,dk); setSwapFrom(null); }
+    else {
+      onSwapDays(swapFrom,dk); setSwapFrom(null);
+      setSwapConfirmed([swapFrom,dk]);
+      if (swapTimer.current) clearTimeout(swapTimer.current);
+      swapTimer.current=setTimeout(()=>setSwapConfirmed(null),1500);
+    }
   };
   const openSheet=(dk)=>{ setSwapFrom(null); setSheetDk(dk); };
 
   return (
     <div {...swipe} onClick={()=>{ if(swapFrom!==null) setSwapFrom(null); }}
       style={{padding:"16px 16px 0"}}>
-      <style>{"@keyframes slideInLeft{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes slideInRight{from{transform:translateX(-100%);opacity:0}to{transform:translateX(0);opacity:1}}"}</style>
+      <style>{"@keyframes slideInLeft{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes slideInRight{from{transform:translateX(-100%);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes swapFlash{0%{background:rgba(232,23,74,0.15)}50%{background:rgba(232,23,74,0.25)}100%{background:transparent}}"}</style>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
         <NavArrow onClick={()=>navWeek(-1)} dir="left"/>
         <div style={{flex:1,textAlign:"center"}}>
@@ -1348,6 +1378,17 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay,updDay,onEdit,onSwapDays}
             style={{flexShrink:0,fontSize:12,fontWeight:700,color:C.muted,background:C.surface,
               border:`1px solid ${C.border}`,borderRadius:20,padding:"5px 12px",cursor:"pointer",
               WebkitTapHighlightColor:"transparent"}}>✕ Cancel swap</button>
+        </div>
+      )}
+
+      {/* Swap success confirmation — brief pill after a swap completes */}
+      {swapConfirmed && (
+        <div style={{
+          textAlign:'center', fontSize:13, fontWeight:600,
+          color:'#E8174A', padding:'6px 0', marginBottom:8,
+          animation:'swapFlash 1.5s ease forwards'
+        }}>
+          ✓ Workouts swapped
         </div>
       )}
 
@@ -1391,11 +1432,13 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay,updDay,onEdit,onSwapDays}
         const target=plannedKm(e);
         const ran=actualKm(e);
         const picked=swapFrom===dk;
+        const flashing=swapConfirmed?.includes(dk);
         return (
           <div key={dk} style={{
             background:picked?C.sageLt:e.completed?C.doneLt:C.surface,
             border:`${picked?2:1}px solid ${picked?C.sage:e.completed?C.done:C.border}`,
             borderRadius:16,padding:"14px 18px",marginBottom:10,
+            animation:flashing?'swapFlash 1.5s ease forwards':undefined,
             display:"flex",alignItems:"center",gap:8}}>
             <button onClick={(ev)=>{ ev.stopPropagation(); onCardTap(dk); }}
               aria-label={`${DN[i]}, ${d.toLocaleDateString("en-US",{month:"short",day:"numeric"})} — ${e.workout?.trim()||"Rest"}${picked?" (selected — tap another day to swap)":""}`}
@@ -1559,14 +1602,14 @@ function MonthView({today,plan,moOff,setMoOff,onGoToDay}) {
 
 // ─── Journey view ───────────────────────────────────────────────────────────────
 const PHASES = [
-  { name: 'Base', weeks: [1,2,3,4], description: 'Building your running foundation. Reduced volume during Ibiza (Jul 10–15). Keep everything easy.' },
-  { name: 'Build', weeks: [5,6,7,8], description: 'First quality sessions introduced. Volume builds to 26km long run before Tuscany.' },
-  { name: 'Tuscany', weeks: [9,10], description: 'Week 9: cycling and light running. Week 10: full rest. Your body consolidates everything.' },
-  { name: 'Peak', weeks: [11,12,13], description: 'Back with fresh legs. Highest training load. Longest runs happen here. Trust the process.' },
-  { name: 'Taper', weeks: [14,15,16], description: 'Volume drops, sharpness maintained. Your body is consolidating 13 weeks of hard work.' },
+  { name: 'Base', weeks: [1,2,3,4], description: 'Building your running foundation carefully. Conservative start, reduced volume during Ibiza (Jul 10–15). Keep everything easy.' },
+  { name: 'Build', weeks: [5,6,7,8], description: 'First quality sessions introduced. Volume builds steadily to 26km long run before Tuscany.' },
+  { name: 'Tuscany', weeks: [9,10], description: 'Week 9: normal training, max 22km long run. Week 10: light 5–8km runs only. Stay in rhythm.' },
+  { name: 'Peak', weeks: [11,12,13,14], description: 'Back with fresh legs. Controlled comeback then highest training load. Longest runs happen here. Trust the process.' },
+  { name: 'Taper', weeks: [15,16], description: 'Volume drops, sharpness maintained. Your body is consolidating everything you have built.' },
   { name: 'Race Week', weeks: [17], description: 'Stay off your feet. Eat well. Sleep. The hay is in the barn.' },
 ];
-const DELOAD_WEEKS = [4,14];   // cutback/recovery weeks within the plan (Tuscany has its own phase)
+const DELOAD_WEEKS = [4,15];   // cutback/recovery weeks within the plan (Tuscany has its own phase)
 
 function JourneyView({plan,today,raceDate,onGoToWeek}) {
   const planStart=new Date(2026,5,29);                 // Week 1 = Mon Jun 29 2026
