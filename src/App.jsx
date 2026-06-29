@@ -50,6 +50,15 @@ function plannedKm(e) { return e?.km||0; }
 // user action, so weekly/monthly planned totals stay constant even after a session is
 // swapped to a non-running workout. Falls back to km for entries without the field.
 function origKm(e) { return e?.plannedKm!=null?e.plannedKm:(e?.km||0); }
+// Planned-total for a set of day entries (week/month/journey): the larger of the
+// original plan volume (summed fixed plannedKm) and the current planned volume
+// (summed km). Holds at the original after a swap to a non-run, but grows if the
+// athlete adds volume beyond the plan. Per-day display still uses plannedKm/origKm.
+function plannedTotal(entries) {
+  let orig=0, cur=0;
+  for (const e of entries) { if (e) { orig+=e.plannedKm||0; cur+=e.km||0; } }
+  return Math.max(orig,cur);
+}
 
 // ─── Workout tips ─────────────────────────────────────────────────────────────
 const TIPS = {
@@ -995,11 +1004,11 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
   const ran=actualKm(e);
 
   const wk=weekOf(0);
-  const wkTarget=wk.reduce((s,dk)=>s+origKm(plan[dk]),0);
+  const wkTarget=plannedTotal(wk.map(dk=>plan[dk]));
   const wkDone=wk.reduce((s,dk)=>s+actualKm(plan[dk]),0);
   const now=new Date();
   const mDays=monthGrid(now.getFullYear(),now.getMonth()).filter(Boolean);
-  const mTarget=mDays.reduce((s,dk)=>s+origKm(plan[dk]),0);
+  const mTarget=plannedTotal(mDays.map(dk=>plan[dk]));
   const mDone=mDays.reduce((s,dk)=>s+actualKm(plan[dk]),0);
 
   return (
@@ -1308,7 +1317,7 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
 function WeekView({today,plan,wkOff,setWkOff,onGoToDay,updDay,onEdit,onSwapDays}) {
   const days=weekOf(wkOff);
   const fmt=dk=>new Date(dk+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});
-  const wkTarget=days.reduce((s,dk)=>s+origKm(plan[dk]),0);
+  const wkTarget=plannedTotal(days.map(dk=>plan[dk]));
   const wkDone=days.reduce((s,dk)=>s+actualKm(plan[dk]),0);
   const [direction,setDirection]=useState(null);   // 'left' | 'right' — week-slide direction
   const [animating,setAnimating]=useState(false);
@@ -1510,7 +1519,7 @@ function MonthView({today,plan,moOff,setMoOff,onGoToDay}) {
   const t=new Date(now.getFullYear(),now.getMonth()+moOff,1);
   const y=t.getFullYear(), m=t.getMonth();
   const days=monthGrid(y,m);
-  const mTarget=days.filter(Boolean).reduce((s,dk)=>s+origKm(plan[dk]),0);
+  const mTarget=plannedTotal(days.filter(Boolean).map(dk=>plan[dk]));
   const mDone=days.filter(Boolean).reduce((s,dk)=>s+actualKm(plan[dk]),0);
   const [direction,setDirection]=useState(null);   // 'left' | 'right' — month-slide direction
   const [animating,setAnimating]=useState(false);
@@ -1622,7 +1631,7 @@ function JourneyView({plan,today,raceDate,onGoToWeek}) {
 
   const weekStats=(N)=>{
     const entries=weekDays(N).map(dk=>plan[dk]||{});
-    const planned=entries.reduce((s,e)=>s+origKm(e),0);
+    const planned=plannedTotal(entries);
     const done=entries.reduce((s,e)=>s+actualKm(e),0);
     const longRun=entries.reduce((mx,e)=>Math.max(mx,origKm(e)),0);
     const started=entries.some(e=>e.completed);   // any session in the week completed
@@ -1728,11 +1737,11 @@ function CoachScreen({viewKey,plan,athleteName,raceName,raceDate,startDate,onBac
   const dayFull=d.toLocaleDateString("en-US",{month:"long",day:"numeric"});
   const target=plannedKm(e), ran=actualKm(e);
   const wk=weekOf(0);
-  const wkTarget=wk.reduce((s,dk)=>s+origKm(plan[dk]),0);
+  const wkTarget=plannedTotal(wk.map(dk=>plan[dk]));
   const wkDone=wk.reduce((s,dk)=>s+actualKm(plan[dk]),0);
   const now=new Date();
   const mDays=monthGrid(now.getFullYear(),now.getMonth()).filter(Boolean);
-  const mTarget=mDays.reduce((s,dk)=>s+origKm(plan[dk]),0);
+  const mTarget=plannedTotal(mDays.map(dk=>plan[dk]));
   const mDone=mDays.reduce((s,dk)=>s+actualKm(plan[dk]),0);
   const feelingLabel=(v)=>FEELINGS.find(f=>f.value===v)?.label||null;
   const feelingEmoji=(v)=>FEELINGS.find(f=>f.value===v)?.emoji||null;
@@ -2005,7 +2014,7 @@ export default function App() {
   const totalDone=allE.filter(e=>e.completed).length;
   const pct=totalPlanned>0?Math.round(totalDone/totalPlanned*100):0;
   const totalKmDone=allE.reduce((s,e)=>s+actualKm(e),0);
-  const totalKmPlanned=allE.reduce((s,e)=>s+origKm(e),0);
+  const totalKmPlanned=plannedTotal(allE);
   const circ=2*Math.PI*30;
   const ringOff=dLeft!==null?circ*Math.max(0,Math.min(1,dLeft/totalDays)):circ;
   const raceCompleted=!!(raceDate&&plan[raceDate]?.completed);
