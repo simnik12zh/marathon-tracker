@@ -60,6 +60,51 @@ function plannedTotal(entries) {
   return Math.max(orig,cur);
 }
 
+// ─── Sessions (1–2 per day) ─────────────────────────────────────────────────────
+// A day holds 1–2 session labels in `sessions` (typically a run + a complement like
+// Strength/Core). Legacy entries with a single `workout` string keep working —
+// getSessions falls back to it, so no migration / storage-key bump is needed.
+// km/kmDone/completed/feeling/notes stay at the DAY level (km belongs to the run).
+function getSessions(e) {
+  if (!e) return [];
+  if (Array.isArray(e.sessions)) return e.sessions.filter(s => s && s.trim());
+  if (e.workout && e.workout.trim()) return [e.workout.trim()];   // legacy entry
+  return [];
+}
+// Map a session label → its workout-type emoji (non-run keywords checked first, so
+// "Easy run" still reads as a run while "Strength" reads as gym).
+function sessionEmoji(s) {
+  const w = (s || "").toLowerCase();
+  if (/strength|kraft|gym/.test(w)) return "🏋️";
+  if (/pilates|core/.test(w)) return "🤸";
+  if (/yoga|mobility|stretch/.test(w)) return "🧘";
+  if (/cycl|bike/.test(w)) return "🚴";
+  if (/walk|hike/.test(w)) return "🚶";
+  if (/hiit/.test(w)) return "💥";
+  if (/sick|injur/.test(w)) return "🤒";
+  if (/run|jog|track|tempo|sharpener|marathon|race|strides|shake/.test(w)) return "🏃";
+  if ((s || "").trim().startsWith("⋯")) return "⋯";
+  const m = (s || "").match(/^(\p{Extended_Pictographic})/u);   // legacy "<emoji> label"
+  return m ? m[1] : "⚡";
+}
+// Map a session label → its sheet action (used for multi-select prefill & run check).
+function sessionAction(s) {
+  const w = (s || "").toLowerCase();
+  if (/strength|kraft|gym/.test(w)) return "strength";
+  if (/pilates|core/.test(w)) return "pilates";
+  if (/yoga|mobility/.test(w)) return "yoga";
+  if (/cycl|bike/.test(w)) return "cycling";
+  if (/walk|hike/.test(w)) return "walking";
+  if (/hiit/.test(w)) return "hiit";
+  if (/sick|injur/.test(w)) return "sick";
+  if (/run|jog|track|tempo|sharpener|marathon|race|strides|shake/.test(w)) return "run";
+  return "other";
+}
+function sessionsLabel(e) { return getSessions(e).join(" + "); }                       // plain, for coach/aria
+function sessionsEmojiStr(e) { return getSessions(e).map(sessionEmoji).join(""); }      // compact emojis
+function sessionsTitle(e) { return getSessions(e).map(s => `${sessionEmoji(s)} ${s}`).join("  +  "); } // emoji + label
+function isRunDay(e) { return getSessions(e).some(s => sessionAction(s) === "run"); }
+
 // ─── Workout tips ─────────────────────────────────────────────────────────────
 const TIPS = {
   easy: {
@@ -220,6 +265,12 @@ const SHEET_OPTIONS = [
   { emoji: '🤒', label: 'Sick/Injured', action: 'sick' },
   { emoji: '😴', label: 'Rest day',     action: 'rest' },
 ];
+// Multi-select toggles in the sheet (up to 2). Other/Rest/Sick stay single immediate
+// actions. SHEET_LABEL is the session string each toggle writes (run preserves the
+// day's existing run label, else defaults to "Easy run").
+const SHEET_TOGGLE = ['run','hiit','yoga','pilates','strength','walking','cycling'];
+const SHEET_LABEL = { run:'Easy run', hiit:'HIIT', yoga:'Yoga', pilates:'Pilates',
+  strength:'Strength', walking:'Walking', cycling:'Cycling' };
 
 const FEELINGS = [
   { value:1, emoji:"😫", label:"Dead legs" },
@@ -863,34 +914,54 @@ function useSwipe(onLeft, onRight) {
 }
 
 // ─── Workout bottom sheet ───────────────────────────────────────────────────────
-// "What are you doing today?" grid, shared by Today and Week views. Operates on a
-// single dateKey: Run opens the editor, Rest clears the day, Other prompts for free
-// text, everything else stores "<emoji> <label>".
-function WorkoutSheet({dateKey:dk,entry,updDay,onEdit,onClose}) {
+// Multi-select unit picker (1–2 types), shared by Today and Week views for one day.
+// Context-aware: today/past → "log" (writes sessions + marks the day done, sets
+// kmDone for runs); future → "plan" (writes sessions only). Other = free text,
+// Rest/Sick = single immediate actions.
+function WorkoutSheet({dateKey:dk,entry,updDay,onClose}) {
   const e=entry||{};
+  const isLog=dk<=todayStr();   // today or past → log; future → plan only
   const [otherMode,setOtherMode]=useState(false);
   const [otherText,setOtherText]=useState("");
+  const [selected,setSelected]=useState(()=>{
+    const pre=getSessions(e).map(sessionAction).filter(a=>SHEET_TOGGLE.includes(a));
+    return [...new Set(pre)].slice(0,2);
+  });
+
+  // Build the session labels from the selected toggles — run first, and its label
+  // preserved from the day if it already had a run (else default Easy run).
+  const existingRun=getSessions(e).find(s=>sessionAction(s)==="run");
+  const built=[...selected].sort((x,y)=>(x==="run"?0:1)-(y==="run"?0:1))
+    .map(a=>a==="run"?(existingRun||SHEET_LABEL.run):SHEET_LABEL[a]);
+  const hasRun=built.some(s=>sessionAction(s)==="run");
+
+  const toggle=(a)=>setSelected(sel=>
+    sel.includes(a) ? sel.filter(x=>x!==a)
+    : sel.length>=2 ? sel : [...sel,a]);   // ignore a 3rd tap while 2 are active
+
+  const confirmSessions=()=>{
+    if (!built.length) return;
+    const u={ sessions:built, workout:built.join(" + ") };
+    if (!hasRun) { u.km=null; u.kmDone=null; }   // no run → no day km
+    if (isLog) {
+      u.completed=true;
+      if (hasRun) u.kmDone=e.kmDone!=null?e.kmDone:(e.km||0);   // log km like the LOG button
+    }
+    updDay(dk,u);   // updDay fires the milestone check when completed && kmDone>0
+    onClose();
+  };
+  const immediate=(opt)=>{
+    if (opt.action==="other") { setOtherMode(true); return; }
+    if (opt.action==="rest") { updDay(dk,{sessions:[],workout:"",km:null,kmDone:null,completed:false}); onClose(); return; }
+    if (opt.action==="sick") { updDay(dk,{sessions:["Sick / Injured"],workout:"Sick / Injured",km:null,kmDone:null,completed:isLog}); onClose(); return; }
+  };
   const confirmOther=()=>{
     const t=otherText.trim();
     if (!t) return;
-    updDay(dk,{workout:`⋯ ${t}`,km:null,kmDone:null,completed:false});
+    updDay(dk,{sessions:[`⋯ ${t}`],workout:`⋯ ${t}`,km:null,kmDone:null,completed:isLog});
     onClose();
   };
-  const onSheetOption=(opt)=>{
-    if (opt.action==="other") { setOtherMode(true); return; }   // ask what they're doing
-    if (opt.action==="run") {
-      // From a non-running session (matches an ALTS label, or has no km) open the
-      // editor with a clean Easy-run default; an existing run is edited as-is.
-      const w=(e.workout||"").toLowerCase();
-      const isNonRunning=ALTS.some(a=>w.includes(a.label.toLowerCase()))||!(e.km>0);
-      onEdit(dk, isNonRunning?{workout:'Easy run',km:8,kmDone:null,completed:false,notes:''}:undefined, true);
-      onClose();
-      return;
-    }
-    if (opt.action==="rest") { updDay(dk,{workout:'',km:null,kmDone:null,completed:false}); onClose(); return; }
-    updDay(dk,{workout:`${opt.emoji} ${opt.label}`,km:null,kmDone:null,completed:false});
-    onClose();
-  };
+
   return (
     <>
       <div onClick={onClose}
@@ -912,7 +983,7 @@ function WorkoutSheet({dateKey:dk,entry,updDay,onEdit,onClose}) {
         {otherMode ? (
           <>
             <div style={{fontSize:16,fontWeight:600,color:C.text,margin:"4px 4px 16px"}}>
-              What are you doing?
+              {isLog?"What did you do?":"What's the plan?"}
             </div>
             <div style={{display:"flex",gap:10}}>
               <input autoFocus value={otherText} onChange={ev=>setOtherText(ev.target.value)}
@@ -930,21 +1001,46 @@ function WorkoutSheet({dateKey:dk,entry,updDay,onEdit,onClose}) {
           </>
         ) : (
           <>
-            <div style={{fontSize:16,fontWeight:600,color:C.text,margin:"4px 4px 16px"}}>
-              What are you doing today?
+            <div style={{fontSize:16,fontWeight:600,color:C.text,margin:"4px 4px 4px"}}>
+              {isLog?"What did you do?":"What's the plan?"}
+            </div>
+            <div style={{fontSize:12,color:C.muted,margin:"0 4px 14px"}}>
+              Pick up to 2 — e.g. a run plus a complement.
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
-              {SHEET_OPTIONS.map(opt=>(
-                <button key={opt.action} onClick={()=>onSheetOption(opt)}
-                  style={{display:"flex",flexDirection:"column",alignItems:"center",
-                    justifyContent:"center",gap:5,minHeight:64,padding:"12px 4px",
-                    background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,
-                    cursor:"pointer",fontFamily:"inherit",WebkitTapHighlightColor:"transparent"}}>
-                  <span style={{fontSize:24,lineHeight:1}}>{opt.emoji}</span>
-                  <span style={{fontSize:11,color:C.muted,textAlign:"center",lineHeight:1.15}}>{opt.label}</span>
-                </button>
-              ))}
+              {SHEET_OPTIONS.map(opt=>{
+                const isToggle=SHEET_TOGGLE.includes(opt.action);
+                const active=isToggle&&selected.includes(opt.action);
+                const dim=isToggle&&!active&&selected.length>=2;
+                return (
+                  <button key={opt.action} onClick={()=>isToggle?toggle(opt.action):immediate(opt)}
+                    aria-pressed={isToggle?active:undefined}
+                    style={{position:"relative",display:"flex",flexDirection:"column",alignItems:"center",
+                      justifyContent:"center",gap:5,minHeight:64,padding:"12px 4px",
+                      background:active?C.sageLt:C.bg,
+                      border:`${active?2:1}px solid ${active?C.done:C.border}`,borderRadius:14,
+                      opacity:dim?0.45:1,cursor:"pointer",fontFamily:"inherit",
+                      WebkitTapHighlightColor:"transparent"}}>
+                    <span style={{fontSize:24,lineHeight:1}}>{opt.emoji}</span>
+                    <span style={{fontSize:11,color:active?C.sageDk:C.muted,fontWeight:active?700:400,
+                      textAlign:"center",lineHeight:1.15}}>{opt.label}</span>
+                    {active&&(
+                      <span style={{position:"absolute",top:5,right:5,width:16,height:16,borderRadius:"50%",
+                        background:C.done,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <Chk size={9}/>
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
+            <button onClick={confirmSessions} disabled={!built.length}
+              style={{width:"100%",marginTop:14,padding:14,
+                background:built.length?C.done:C.muted,color:"#fff",border:"none",borderRadius:14,
+                fontFamily:"inherit",fontSize:15,fontWeight:700,
+                cursor:built.length?"pointer":"default",WebkitTapHighlightColor:"transparent"}}>
+              {built.length?`${isLog?"Log":"Save"} ${built.join(" + ")}`:(isLog?"Pick what you did":"Pick a session")}
+            </button>
           </>
         )}
       </div>
@@ -1000,6 +1096,8 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
   const dayName=d.toLocaleDateString("en-US",{weekday:"long"});
   const dayFull=d.toLocaleDateString("en-US",{month:"long",day:"numeric"});
   const hasKm=(e.km||0)>0;
+  const sessions=getSessions(e);
+  const hasWorkout=sessions.length>0;
   const target=plannedKm(e);
   const ran=actualKm(e);
 
@@ -1022,8 +1120,8 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
             // Genuinely empty day: "Rest".
             node: hasKm
               ? <span style={{color:e.completed?C.done:C.text}}>{fmtKm(e.completed?ran:target)} km</span>
-              : e.workout?.trim()
-                ? (ALTS.find(a=>e.workout.includes(a.label))?.emoji ?? '⚡')
+              : hasWorkout
+                ? sessionsEmojiStr(e)
                 : 'Rest',
             lbl: "Today",
           },
@@ -1088,13 +1186,13 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
           alignItems:"flex-start",gap:12}}>
           <div style={{flex:1}}>
             <div style={{fontSize:17,fontWeight:600,lineHeight:1.35,
-              color:e.workout?.trim()?C.text:C.muted,
-              fontStyle:e.workout?.trim()?"normal":"italic"}}>
-              {e.workout?.trim()||"Rest day"}
+              color:hasWorkout?C.text:C.muted,
+              fontStyle:hasWorkout?"normal":"italic"}}>
+              {hasWorkout?sessionsTitle(e):"Rest day"}
             </div>
           </div>
           {/* No circle on genuine rest days — nothing to log. */}
-          {e.workout?.trim()&&(e.completed
+          {hasWorkout&&(e.completed
             ? <button onClick={()=>setConfirmUnlog(true)}
                 aria-label="Completed — tap to undo"
                 style={{width:64,height:64,borderRadius:"50%",border:"none",
@@ -1143,8 +1241,8 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
           </div>
         )}
 
-        {/* ── Tip ── */}
-        <TipCard workout={e.workout}/>
+        {/* ── Tips — one per session that has guidance ── */}
+        {sessions.map((s,i)=><TipCard key={i} workout={s}/>)}
 
         {/* km */}
         {hasKm&&(
@@ -1294,7 +1392,7 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
       </div>{/* /overflow wrapper */}
 
       {/* Ask the coach — opens the full-screen coach. */}
-      {e.workout?.trim()&&(
+      {hasWorkout&&(
         <button onClick={onOpenCoach} style={{width:"100%",marginTop:16,padding:"14px",
           background:C.done,color:"#fff",border:"none",borderRadius:12,
           fontFamily:"inherit",fontSize:15,fontWeight:600,cursor:"pointer",
@@ -1410,9 +1508,11 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay,updDay,onEdit,onSwapDays}
           const e=plan[dk]||{};
           const isT=dk===today;
           const hasKm=(e.km||0)>0;
+          const sess=getSessions(e);
+          const emo=sessionsEmojiStr(e);
           return (
             <button key={dk} onClick={()=>onGoToDay(dk)}
-              aria-label={`${DN[i]}, ${new Date(dk+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})} — ${e.workout?.trim()||"Rest"}`}
+              aria-label={`${DN[i]}, ${new Date(dk+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})} — ${sessionsLabel(e)||"Rest"}`}
               style={{
               display:"block",width:"100%",fontFamily:"inherit",
               background:e.completed?C.doneLt:isT?C.sageLt:C.surface,
@@ -1424,9 +1524,12 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay,updDay,onEdit,onSwapDays}
               <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:4}}>
                 {new Date(dk+"T00:00:00").getDate()}
               </div>
-              <div style={{fontSize:9,fontWeight:700,lineHeight:1,
-                color:e.completed?C.done:hasKm?C.warm:C.muted}}>
-                {e.completed?`${fmtKm(actualKm(e))}k`:hasKm?`${fmtKm(e.km)}k`:"·"}
+              {/* emoji(s) + the run's km — smaller when two sessions, never wraps */}
+              <div style={{fontSize:sess.length>1?8:9,fontWeight:700,lineHeight:1,
+                whiteSpace:"nowrap",overflow:"hidden"}}>
+                {sess.length
+                  ? <>{emo}{hasKm&&<span style={{color:e.completed?C.done:C.warm}}> {e.completed?fmtKm(actualKm(e)):fmtKm(e.km)}k</span>}</>
+                  : <span style={{color:C.muted}}>·</span>}
               </div>
             </button>
           );
@@ -1450,7 +1553,7 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay,updDay,onEdit,onSwapDays}
             animation:flashing?'swapFlash 1.5s ease forwards':undefined,
             display:"flex",alignItems:"center",gap:8}}>
             <button onClick={(ev)=>{ ev.stopPropagation(); onCardTap(dk); }}
-              aria-label={`${DN[i]}, ${d.toLocaleDateString("en-US",{month:"short",day:"numeric"})} — ${e.workout?.trim()||"Rest"}${picked?" (selected — tap another day to swap)":""}`}
+              aria-label={`${DN[i]}, ${d.toLocaleDateString("en-US",{month:"short",day:"numeric"})} — ${sessionsLabel(e)||"Rest"}${picked?" (selected — tap another day to swap)":""}`}
               style={{flex:1,minWidth:0,display:"flex",justifyContent:"space-between",
                 alignItems:"center",gap:10,background:"none",border:"none",padding:0,
                 textAlign:"left",fontFamily:"inherit",cursor:"pointer",
@@ -1461,10 +1564,10 @@ function WeekView({today,plan,wkOff,setWkOff,onGoToDay,updDay,onEdit,onSwapDays}
                   {isT?"● Today  ·  ":""}{DN[i]}, {d.toLocaleDateString("en-US",{month:"short",day:"numeric"})}
                 </div>
                 <div style={{fontSize:15,fontWeight:500,
-                  color:e.workout?.trim()?C.text:C.muted,
-                  fontStyle:e.workout?.trim()?"normal":"italic",
+                  color:getSessions(e).length?C.text:C.muted,
+                  fontStyle:getSessions(e).length?"normal":"italic",
                   whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                  {e.workout?.trim()||"Rest"}
+                  {getSessions(e).length?sessionsTitle(e):"Rest"}
                 </div>
               </div>
               {target>0&&(
@@ -1570,11 +1673,12 @@ function MonthView({today,plan,moOff,setMoOff,onGoToDay}) {
           if (!dk) return <div key={`e${i}`}/>;
           const e=plan[dk]||{};
           const hasKm=(e.km||0)>0;
-          const hasWorkout=!!e.workout?.trim();
+          const sess=getSessions(e);
+          const hasWorkout=sess.length>0;
           const isT=dk===today;
           return (
             <button key={dk} onClick={()=>onGoToDay(dk)}
-              aria-label={`${new Date(dk+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})} — ${e.workout?.trim()||"Rest"}`}
+              aria-label={`${new Date(dk+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})} — ${sessionsLabel(e)||"Rest"}`}
               style={{
               width:"100%",padding:0,fontFamily:"inherit",
               aspectRatio:"1",borderRadius:10,display:"flex",flexDirection:"column",
@@ -1588,15 +1692,17 @@ function MonthView({today,plan,moOff,setMoOff,onGoToDay}) {
                 color:(hasWorkout||isT)?C.text:C.borderSt,lineHeight:1}}>
                 {new Date(dk+"T00:00:00").getDate()}
               </div>
-              {/* Running days show km; non-running sessions show their workout emoji. */}
+              {/* Run days show km (with the complement's emoji if any); non-run days
+                  show their session emoji(s). Both emojis shown for two sessions. */}
               {hasKm
-                ? <div style={{fontSize:9,fontWeight:700,fontFamily:"monospace",lineHeight:1,
+                ? <div style={{fontSize:sess.length>1?8:9,fontWeight:700,lineHeight:1,whiteSpace:"nowrap",
                     color:e.completed?C.done:C.warm}}>
-                    {e.completed?`${fmtKm(actualKm(e))}k`:`${fmtKm(e.km)}k`}
+                    {sess.length>1?sessionsEmojiStr(e):""}{e.completed?`${fmtKm(actualKm(e))}k`:`${fmtKm(e.km)}k`}
                   </div>
                 : hasWorkout
-                  ? <div style={{fontSize:12,lineHeight:1,color:e.completed?C.done:undefined}}>
-                      {ALTS.find(a=>e.workout?.includes(a.label))?.emoji||"⚡"}
+                  ? <div style={{fontSize:sess.length>1?10:12,lineHeight:1,whiteSpace:"nowrap",
+                      color:e.completed?C.done:undefined}}>
+                      {sessionsEmojiStr(e)}
                     </div>
                   : null}
             </button>
@@ -1747,23 +1853,23 @@ function CoachScreen({viewKey,plan,athleteName,raceName,raceDate,startDate,onBac
   const feelingEmoji=(v)=>FEELINGS.find(f=>f.value===v)?.emoji||null;
   const buildCoachContext=()=>{
     const today=todayStr();
-    const dates=Object.keys(plan).filter(dk=>plan[dk]?.workout?.trim()).sort();
+    const dates=Object.keys(plan).filter(dk=>getSessions(plan[dk]).length>0).sort();
     const history=[], upcoming=[];
     for (const dk of dates) {
       const re=plan[dk];
       if (re.completed) {
-        history.push({date:dk,workout:re.workout.trim(),plannedKm:plannedKm(re),
+        history.push({date:dk,workout:sessionsLabel(re),plannedKm:plannedKm(re),
           kmDone:actualKm(re),feeling:feelingLabel(re.feeling),emoji:feelingEmoji(re.feeling),
           notes:re.notes?.trim()||null});
       } else if (dk>today&&(!raceDate||dk<=raceDate)) {
-        upcoming.push({date:dk,workout:re.workout.trim(),km:plannedKm(re)});
+        upcoming.push({date:dk,workout:sessionsLabel(re),km:plannedKm(re)});
       }
     }
     const dleft=daysUntil(raceDate);
     return {
       athleteName:athleteName?.trim()||null,
       raceName,raceDate,today,daysUntilRace:dleft,phase:phaseFor(dleft),
-      day:{date:viewKey,label:`${dayName}, ${dayFull}`,workout:e.workout,
+      day:{date:viewKey,label:`${dayName}, ${dayFull}`,workout:sessionsLabel(e),
         plannedKm:target,actualKm:ran,completed:!!e.completed,feeling:feelingLabel(e.feeling)},
       history,upcoming,
       week:{doneKm:wkDone,plannedKm:wkTarget},
@@ -1959,7 +2065,7 @@ export default function App() {
   const checkMilestones=(dateKey,planState)=>{
     const allEntries=Object.entries(planState)
       .filter(([k,e])=>e.completed&&e.kmDone)
-      .map(([k,e])=>({...e,date:k}));
+      .map(([k,e])=>({...e,date:k,workout:sessionsLabel(e)}));   // joined label so type checks still match
     const entry=allEntries.find(e=>e.date===dateKey);
     if (!entry) return;
     const totalKm=allEntries.reduce((sum,e)=>sum+(e.kmDone||0),0);
@@ -1990,8 +2096,8 @@ export default function App() {
   const swapDays=(a,b)=>{
     const ea=plan[a]||{}, eb=plan[b]||{};
     const np={...plan,
-      [a]:{...plan[a],workout:eb.workout||'',km:eb.km??null,plannedKm:eb.plannedKm??null},
-      [b]:{...plan[b],workout:ea.workout||'',km:ea.km??null,plannedKm:ea.plannedKm??null}};
+      [a]:{...plan[a],sessions:getSessions(eb),workout:sessionsLabel(eb),km:eb.km??null,plannedKm:eb.plannedKm??null},
+      [b]:{...plan[b],sessions:getSessions(ea),workout:sessionsLabel(ea),km:ea.km??null,plannedKm:ea.plannedKm??null}};
     setPlan(np); save(np);
   };
   const openEdit=(dk,entryOverride,isRun)=>{ setEditKey(dk); setEditEntry(entryOverride||null); setEditIsRun(!!isRun); setScreen("editday"); };
@@ -2010,7 +2116,7 @@ export default function App() {
   const totalDays=(startDate&&raceDate)
     ?Math.max(1,Math.ceil((new Date(raceDate+"T00:00:00")-new Date(startDate+"T00:00:00"))/86400000)):121;
   const allE=Object.values(plan);
-  const totalPlanned=allE.filter(e=>e.workout?.trim()).length;
+  const totalPlanned=allE.filter(e=>getSessions(e).length>0).length;
   const totalDone=allE.filter(e=>e.completed).length;
   const pct=totalPlanned>0?Math.round(totalDone/totalPlanned*100):0;
   const totalKmDone=allE.reduce((s,e)=>s+actualKm(e),0);
