@@ -760,6 +760,13 @@ const WORKOUT_OPTIONS = [
   "Track session – 6×800m","Track session – 8×1km","Sharpener – 5×1km",
   "Easy run with strides","Easy jog with strides","Easy jog","Shake-out jog",
 ];
+// Sensible starting distance per run type — used to seed km when a run is added to a
+// day that has none yet, and when switching run type on a km-less day.
+const RUN_DEFAULT_KM = {
+  'Easy run':8, 'Easy recovery run':6, 'Long run':20, 'Tempo run':10,
+  'Track session – 6×800m':11, 'Track session – 8×1km':14, 'Sharpener – 5×1km':10,
+  'Easy run with strides':6, 'Easy jog with strides':5, 'Easy jog':4, 'Shake-out jog':3,
+};
 
 // Shared km stepper (−/+0.5km) with a "tap to type exact" numeric input.
 function KmStepper({value,onAdjust,raw,setRaw,typing,setTyping,accent}) {
@@ -942,10 +949,16 @@ function WorkoutSheet({dateKey:dk,entry,updDay,onClose}) {
   const confirmSessions=()=>{
     if (!built.length) return;
     const u={ sessions:built, workout:built.join(" + ") };
-    if (!hasRun) { u.km=null; u.kmDone=null; }   // no run → no day km
+    if (!hasRun) {
+      u.km=null; u.kmDone=null;   // no run → no day km
+    } else if (!(e.km>0)) {
+      // run added to a day with no distance yet → seed the run type's default
+      const rl=built.find(s=>sessionAction(s)==="run");
+      if (RUN_DEFAULT_KM[rl]!=null) u.km=RUN_DEFAULT_KM[rl];
+    }
     if (isLog) {
       u.completed=true;
-      if (hasRun) u.kmDone=e.kmDone!=null?e.kmDone:(e.km||0);   // log km like the LOG button
+      if (hasRun) u.kmDone=e.kmDone!=null?e.kmDone:(u.km!=null?u.km:(e.km||0));   // log km like the LOG button
     }
     updDay(dk,u);   // updDay fires the milestone check when completed && kmDone>0
     onClose();
@@ -1098,8 +1111,18 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
   const hasKm=(e.km||0)>0;
   const sessions=getSessions(e);
   const hasWorkout=sessions.length>0;
+  const isRun=isRunDay(e);
+  const runType=sessions.find(s=>sessionAction(s)==="run")||"Easy run";
   const target=plannedKm(e);
   const ran=actualKm(e);
+  // Change the run's flavour (Easy/Tempo/Long/…) within the day's sessions; seed a
+  // sensible distance if the day has none yet, else keep the athlete's km.
+  const setRunType=(newType)=>{
+    const next=getSessions(e).map(s=>sessionAction(s)==="run"?newType:s);
+    const u={sessions:next,workout:next.join(" + ")};
+    if (!(e.km>0)&&RUN_DEFAULT_KM[newType]!=null) u.km=RUN_DEFAULT_KM[newType];
+    updDay(viewKey,u);
+  };
 
   const wk=weekOf(0);
   const wkTarget=plannedTotal(wk.map(dk=>plan[dk]));
@@ -1200,7 +1223,7 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
                   alignItems:"center",justifyContent:"center",
                   animation:"checkPop .35s ease-out",
                   WebkitTapHighlightColor:"transparent"}}><Chk size={22}/></button>
-            : <button onClick={hasKm?completeRun:()=>updDay(viewKey,{completed:true})}
+            : <button onClick={isRun?completeRun:()=>updDay(viewKey,{completed:true})}
                 aria-label="Mark as done"
                 style={{width:64,height:64,borderRadius:"50%",
                   border:`2.5px solid ${C.done}`,background:C.sageLt,cursor:"pointer",
@@ -1241,11 +1264,27 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
           </div>
         )}
 
-        {/* ── Tips — one per session that has guidance ── */}
-        {sessions.map((s,i)=><TipCard key={i} workout={s}/>)}
+        {/* Run first: its tip → type → km (the km belongs to the run), so the run
+            block reads as a unit before the complement session's description. */}
+        {sessions.filter(s=>sessionAction(s)==="run").map((s,i)=><TipCard key={"run"+i} workout={s}/>)}
+
+        {/* Run type — pick the run's flavour (Easy/Tempo/Long/…). km stepper is below. */}
+        {isRun&&!e.completed&&(
+          <div style={{marginTop:16,paddingTop:16,borderTop:`1px solid ${C.border}`}}>
+            <label style={{fontSize:11,textTransform:"uppercase",letterSpacing:".06em",
+              color:C.muted,display:"block",marginBottom:8}}>Run type</label>
+            <select value={runType} onChange={ev=>setRunType(ev.target.value)}
+              style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px",
+                fontFamily:"inherit",fontSize:15,color:C.text,background:C.bg,outline:"none",
+                boxSizing:"border-box",WebkitAppearance:"menulist",appearance:"menulist",cursor:"pointer"}}>
+              {!WORKOUT_OPTIONS.includes(runType)&&<option value={runType}>{runType}</option>}
+              {WORKOUT_OPTIONS.map(o=><option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+        )}
 
         {/* km */}
-        {hasKm&&(
+        {isRun&&(
           <div style={{marginTop:16,paddingTop:16,
             borderTop:`1px solid ${e.completed?"rgba(232,23,74,0.2)":C.border}`}}>
             {e.completed
@@ -1326,6 +1365,9 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
             }
           </div>
         )}
+
+        {/* Complement session description(s) — after the run's km */}
+        {sessions.filter(s=>sessionAction(s)!=="run").map((s,i)=><TipCard key={"alt"+i} workout={s}/>)}
 
         {/* Feeling rating — shown when completed */}
         {e.completed&&(
