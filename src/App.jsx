@@ -100,10 +100,26 @@ function sessionAction(s) {
   if (/run|jog|track|tempo|sharpener|marathon|race|strides|shake/.test(w)) return "run";
   return "other";
 }
-function sessionsLabel(e) { return getSessions(e).join(" + "); }                       // plain, for coach/aria
+// Strip a leading emoji / "⋯" marker from a stored label ("💥 HIIT" → "HIIT") so
+// displays that prepend sessionEmoji don't show it twice. Legacy entries keep the
+// emoji inside the label; storage is never rewritten.
+function cleanLabel(s) {
+  const t = (s || "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
+  return t || s || "";
+}
+function sessionsLabel(e) { return getSessions(e).map(cleanLabel).join(" + "); }         // plain, for coach/aria
 function sessionsEmojiStr(e) { return getSessions(e).map(sessionEmoji).join(""); }      // compact emojis
-function sessionsTitle(e) { return getSessions(e).map(s => `${sessionEmoji(s)} ${s}`).join("  +  "); } // emoji + label
+function sessionsTitle(e) { return getSessions(e).map(s => `${sessionEmoji(s)} ${cleanLabel(s)}`).join("  +  "); } // emoji + label
 function isRunDay(e) { return getSessions(e).some(s => sessionAction(s) === "run"); }
+// Per-unit log accessor. The day-level completed/feeling/notes(/kmDone) belong to the
+// FIRST unit — the run on run days, since the sheet always sorts runs first — so day
+// "done" (week/month checks, counts, ring) means the primary unit is logged; the
+// second unit is a bonus that logs into `e.alt` and doesn't count toward the target.
+function sessionLog(e, idx) {
+  if (idx === 0) return { completed: !!e?.completed, feeling: e?.feeling ?? null, notes: e?.notes ?? "" };
+  const a = e?.alt || {};
+  return { completed: !!a.completed, feeling: a.feeling ?? null, notes: a.notes ?? "" };
+}
 
 // ─── Workout tips ─────────────────────────────────────────────────────────────
 const TIPS = {
@@ -935,11 +951,28 @@ function WorkoutSheet({dateKey:dk,entry,updDay,onClose}) {
     return [...new Set(pre)].slice(0,2);
   });
 
-  // Build the session labels from the selected toggles — run first, and its label
-  // preserved from the day if it already had a run (else default Easy run).
+  // Run planning lives in the sheet too: type + distance, prefilled from the day's
+  // existing run — so a future run can be fully planned from the Week view without
+  // a detour via the Today view.
   const existingRun=getSessions(e).find(s=>sessionAction(s)==="run");
+  const [runSel,setRunSel]=useState(existingRun||"Easy run");
+  const [kmRaw,setKmRaw]=useState(()=> e.km>0?String(e.km):String(RUN_DEFAULT_KM[existingRun||"Easy run"]??8));
+  const [kmTyping,setKmTyping]=useState(false);
+  const kmNum=parseFloat(kmRaw)||0;
+  const stepKm=(d)=>setKmRaw(String(Math.max(0,parseFloat((kmNum+d).toFixed(1)))));
+  // Switching run type follows with its default distance — unless the athlete
+  // already set a custom km for this day.
+  const onRunTypeChange=(next)=>{
+    const prevDefault=RUN_DEFAULT_KM[runSel];
+    const cur=kmRaw.trim();
+    if (RUN_DEFAULT_KM[next]!=null&&(cur===""||parseFloat(cur)===0||(prevDefault!=null&&parseFloat(cur)===prevDefault))) setKmRaw(String(RUN_DEFAULT_KM[next]));
+    setRunSel(next);
+  };
+
+  // Build the session labels from the selected toggles — run first, using the type
+  // picked in the sheet.
   const built=[...selected].sort((x,y)=>(x==="run"?0:1)-(y==="run"?0:1))
-    .map(a=>a==="run"?(existingRun||SHEET_LABEL.run):SHEET_LABEL[a]);
+    .map(a=>a==="run"?runSel:SHEET_LABEL[a]);
   const hasRun=built.some(s=>sessionAction(s)==="run");
 
   const toggle=(a)=>setSelected(sel=>
@@ -951,11 +984,11 @@ function WorkoutSheet({dateKey:dk,entry,updDay,onClose}) {
     const u={ sessions:built, workout:built.join(" + ") };
     if (!hasRun) {
       u.km=null; u.kmDone=null;   // no run → no day km
-    } else if (!(e.km>0)) {
-      // run added to a day with no distance yet → seed the run type's default
-      const rl=built.find(s=>sessionAction(s)==="run");
-      if (RUN_DEFAULT_KM[rl]!=null) u.km=RUN_DEFAULT_KM[rl];
+    } else {
+      u.km=kmNum>0?kmNum:null;    // the distance planned/edited in the sheet
     }
+    // Second unit's log lives in `alt`: planning resets it, sheet-log marks it done too.
+    u.alt=built.length>1?(isLog?{completed:true}:null):null;
     if (isLog) {
       u.completed=true;
       if (hasRun) u.kmDone=e.kmDone!=null?e.kmDone:(u.km!=null?u.km:(e.km||0));   // log km like the LOG button
@@ -965,13 +998,13 @@ function WorkoutSheet({dateKey:dk,entry,updDay,onClose}) {
   };
   const immediate=(opt)=>{
     if (opt.action==="other") { setOtherMode(true); return; }
-    if (opt.action==="rest") { updDay(dk,{sessions:[],workout:"",km:null,kmDone:null,completed:false}); onClose(); return; }
-    if (opt.action==="sick") { updDay(dk,{sessions:["Sick / Injured"],workout:"Sick / Injured",km:null,kmDone:null,completed:isLog}); onClose(); return; }
+    if (opt.action==="rest") { updDay(dk,{sessions:[],workout:"",km:null,kmDone:null,completed:false,alt:null}); onClose(); return; }
+    if (opt.action==="sick") { updDay(dk,{sessions:["Sick / Injured"],workout:"Sick / Injured",km:null,kmDone:null,completed:isLog,alt:null}); onClose(); return; }
   };
   const confirmOther=()=>{
     const t=otherText.trim();
     if (!t) return;
-    updDay(dk,{sessions:[`⋯ ${t}`],workout:`⋯ ${t}`,km:null,kmDone:null,completed:isLog});
+    updDay(dk,{sessions:[`⋯ ${t}`],workout:`⋯ ${t}`,km:null,kmDone:null,completed:isLog,alt:null});
     onClose();
   };
 
@@ -984,6 +1017,7 @@ function WorkoutSheet({dateKey:dk,entry,updDay,onClose}) {
         maxWidth:480,margin:"0 auto",background:C.surface,
         borderRadius:"20px 20px 0 0",boxShadow:"0 -8px 30px rgba(0,0,0,0.18)",
         padding:"8px 16px calc(20px + env(safe-area-inset-bottom))",
+        maxHeight:"85vh",overflowY:"auto",
         animation:"sheetUp .25s ease-out"}}>
         <style>{"@keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}"}</style>
         {/* Tappable grab handle — tap (or tap outside) to dismiss. */}
@@ -1047,6 +1081,24 @@ function WorkoutSheet({dateKey:dk,entry,updDay,onClose}) {
                 );
               })}
             </div>
+            {/* Run planning — type + distance, shown while Run is selected, so a
+                future run can be fully planned right here (Week view included). */}
+            {selected.includes("run")&&(
+              <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${C.border}`}}>
+                <label style={{fontSize:11,textTransform:"uppercase",letterSpacing:".06em",
+                  color:C.muted,display:"block",marginBottom:8}}>Run type</label>
+                <select value={runSel} onChange={ev=>onRunTypeChange(ev.target.value)}
+                  style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px",
+                    fontFamily:"inherit",fontSize:15,color:C.text,background:C.bg,outline:"none",
+                    boxSizing:"border-box",WebkitAppearance:"menulist",appearance:"menulist",
+                    cursor:"pointer",marginBottom:12}}>
+                  {!WORKOUT_OPTIONS.includes(runSel)&&<option value={runSel}>{runSel}</option>}
+                  {WORKOUT_OPTIONS.map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+                <KmStepper value={kmNum} onAdjust={stepKm} raw={kmRaw} setRaw={setKmRaw}
+                  typing={kmTyping} setTyping={setKmTyping} accent={C.done}/>
+              </div>
+            )}
             <button onClick={confirmSessions} disabled={!built.length}
               style={{width:"100%",marginTop:14,padding:14,
                 background:built.length?C.done:C.muted,color:"#fff",border:"none",borderRadius:14,
@@ -1070,9 +1122,9 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
   const [sheetOpen,setSheetOpen]=useState(false);   // swap-arrows change-workout sheet
   const [direction,setDirection]=useState(null);    // 'left' | 'right' — day-slide direction
   const [animating,setAnimating]=useState(false);   // day-change slide in progress
-  const [notesOpen,setNotesOpen]=useState(false);   // notes textarea expanded for editing
-  const [confirmUnlog,setConfirmUnlog]=useState(false);   // inline "remove log entry?" confirmation
-  useEffect(()=>{ setNotesOpen(false); setConfirmUnlog(false); },[viewKey]); // reset on day change
+  const [notesOpen,setNotesOpen]=useState(null);    // card index whose notes editor is open
+  const [confirmUnlog,setConfirmUnlog]=useState(null);   // card index asking "remove log entry?"
+  useEffect(()=>{ setNotesOpen(null); setConfirmUnlog(null); },[viewKey]); // reset on day change
 
   const navDay=(delta)=>{
     setEditingKm(false); setSheetOpen(false);
@@ -1085,7 +1137,20 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
   };
   const swipe=useSwipe(()=>navDay(1),()=>navDay(-1));
   const completeRun=()=>updDay(viewKey,{completed:true,kmDone:e.km||0});
-  const handleUnlog=()=>{ updDay(viewKey,{completed:false,kmDone:null}); setConfirmUnlog(false); };
+  // Per-card log handlers: card 0 logs into the day-level fields (run/primary — this
+  // is what marks the day "done"), card 1 logs into `e.alt` (bonus, not in the target).
+  // Milestones only fire via updDay's completed+kmDone path, i.e. when the run is logged.
+  const logSession=(idx)=>{
+    if (idx===0) { sessionAction(getSessions(e)[0]||"")==="run"?completeRun():updDay(viewKey,{completed:true}); }
+    else updDay(viewKey,{alt:{...(e.alt||{}),completed:true}});
+  };
+  const unlogSession=(idx)=>{
+    if (idx===0) updDay(viewKey,{completed:false,kmDone:null});
+    else updDay(viewKey,{alt:{...(e.alt||{}),completed:false}});
+    setConfirmUnlog(null);
+  };
+  const setSessionFeeling=(idx,v)=>idx===0?updDay(viewKey,{feeling:v}):updDay(viewKey,{alt:{...(e.alt||{}),feeling:v}});
+  const setSessionNotes=(idx,t)=>idx===0?updDay(viewKey,{notes:t}):updDay(viewKey,{alt:{...(e.alt||{}),notes:t}});
   const adjustKm=(delta)=>{
     const next=Math.max(0,parseFloat((ran+delta).toFixed(1)));
     updDay(viewKey,{kmDone:next});
@@ -1199,32 +1264,58 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
         <NavArrow onClick={()=>navDay(1)} dir="right"/>
       </div>
 
-      {/* Workout card */}
-      <div style={{background:e.completed?C.doneLt:C.surface,
-        border:`1px solid ${e.completed?"rgba(232,23,74,0.3)":C.border}`,
-        borderRadius:18,padding:"20px 20px 16px"}}>
+      {/* Two units: the combined day title + the ⇅ switcher sit above the unit cards. */}
+      {sessions.length>1&&(
+        <div style={{display:"flex",alignItems:"center",gap:8,margin:"0 4px 10px"}}>
+          <div style={{flex:1,fontSize:17,fontWeight:600,lineHeight:1.35,color:C.text}}>
+            {sessionsTitle(e)}
+          </div>
+          <button onClick={()=>setSheetOpen(true)} aria-label="Change workout"
+            style={{width:44,height:44,border:"none",background:"transparent",color:C.muted,
+              cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
+              flexShrink:0,WebkitTapHighlightColor:"transparent"}}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 16V4m0 0L3 8m4-4l4 4"/>
+              <path d="M17 8v12m0 0l4-4m-4 4l-4-4"/>
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* One card per unit — each logs separately with its own feeling + note. The
+          day counts as done when card 0 (run/primary) is logged; the second unit is
+          a bonus. Rest days render a single card with just the ⇅ switcher. */}
+      {(hasWorkout?sessions:[null]).map((s,idx)=>{
+        const log=sessionLog(e,idx);
+        const isRunCard=!!s&&sessionAction(s)==="run";
+        const single=sessions.length<=1;
+        return (
+      <div key={idx} style={{background:s&&log.completed?C.doneLt:C.surface,
+        border:`1px solid ${s&&log.completed?"rgba(232,23,74,0.3)":C.border}`,
+        borderRadius:18,padding:"20px 20px 16px",marginBottom:12}}>
 
         {/* Name + check */}
         <div style={{display:"flex",justifyContent:"space-between",
           alignItems:"flex-start",gap:12}}>
           <div style={{flex:1}}>
             <div style={{fontSize:17,fontWeight:600,lineHeight:1.35,
-              color:hasWorkout?C.text:C.muted,
-              fontStyle:hasWorkout?"normal":"italic"}}>
-              {hasWorkout?sessionsTitle(e):"Rest day"}
+              color:s?C.text:C.muted,
+              fontStyle:s?"normal":"italic"}}>
+              {s?`${sessionEmoji(s)} ${cleanLabel(s)}`:"Rest day"}
             </div>
           </div>
           {/* No circle on genuine rest days — nothing to log. */}
-          {hasWorkout&&(e.completed
-            ? <button onClick={()=>setConfirmUnlog(true)}
+          {s&&(log.completed
+            ? <button onClick={()=>setConfirmUnlog(idx)}
                 aria-label="Completed — tap to undo"
                 style={{width:64,height:64,borderRadius:"50%",border:"none",
                   background:C.done,cursor:"pointer",display:"flex",flexShrink:0,
                   alignItems:"center",justifyContent:"center",
                   animation:"checkPop .35s ease-out",
                   WebkitTapHighlightColor:"transparent"}}><Chk size={22}/></button>
-            : <button onClick={isRun?completeRun:()=>updDay(viewKey,{completed:true})}
-                aria-label="Mark as done"
+            : <button onClick={()=>logSession(idx)}
+                aria-label={`Log ${cleanLabel(s)}`}
                 style={{width:64,height:64,borderRadius:"50%",
                   border:`2.5px solid ${C.done}`,background:C.sageLt,cursor:"pointer",
                   display:"flex",flexShrink:0,alignItems:"center",justifyContent:"center",
@@ -1232,7 +1323,7 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
                 <span style={{fontSize:11,fontWeight:700,color:C.sageDk,letterSpacing:'.08em'}}>LOG</span>
               </button>
           )}
-          <button onClick={()=>setSheetOpen(true)} aria-label="Change workout"
+          {single&&<button onClick={()=>setSheetOpen(true)} aria-label="Change workout"
             style={{width:44,height:44,border:"none",background:"transparent",color:C.muted,
               cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
               flexShrink:0,marginTop:10,WebkitTapHighlightColor:"transparent"}}>
@@ -1241,22 +1332,22 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
               <path d="M7 16V4m0 0L3 8m4-4l4 4"/>
               <path d="M17 8v12m0 0l4-4m-4 4l-4-4"/>
             </svg>
-          </button>
+          </button>}
         </div>
 
-        {/* Inline confirmation before removing a completed log */}
-        {confirmUnlog && (
+        {/* Inline confirmation before removing this unit's log */}
+        {confirmUnlog===idx && (
           <div style={{
             display:'flex', alignItems:'center', gap:12,
             padding:'10px 0', borderTop:`1px solid ${C.border}`
           }}>
             <span style={{fontSize:13, color:C.muted, flex:1}}>Remove this log entry?</span>
-            <button onClick={handleUnlog} style={{
+            <button onClick={()=>unlogSession(idx)} style={{
               fontSize:12, fontWeight:700, color:'#E8174A',
               background:'none', border:'none', padding:'4px 8px',
               cursor:'pointer', WebkitTapHighlightColor:'transparent'
             }}>Remove</button>
-            <button onClick={() => setConfirmUnlog(false)} style={{
+            <button onClick={() => setConfirmUnlog(null)} style={{
               fontSize:12, fontWeight:600, color:C.muted,
               background:'none', border:'none', padding:'4px 8px',
               cursor:'pointer', WebkitTapHighlightColor:'transparent'
@@ -1264,12 +1355,11 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
           </div>
         )}
 
-        {/* Run first: its tip → type → km (the km belongs to the run), so the run
-            block reads as a unit before the complement session's description. */}
-        {sessions.filter(s=>sessionAction(s)==="run").map((s,i)=><TipCard key={"run"+i} workout={s}/>)}
+        {/* Unit description / effort tip */}
+        {s&&<TipCard workout={s}/>}
 
         {/* Run type — pick the run's flavour (Easy/Tempo/Long/…). km stepper is below. */}
-        {isRun&&!e.completed&&(
+        {isRunCard&&!e.completed&&(
           <div style={{marginTop:16,paddingTop:16,borderTop:`1px solid ${C.border}`}}>
             <label style={{fontSize:11,textTransform:"uppercase",letterSpacing:".06em",
               color:C.muted,display:"block",marginBottom:8}}>Run type</label>
@@ -1284,7 +1374,7 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
         )}
 
         {/* km */}
-        {isRun&&(
+        {isRunCard&&(
           <div style={{marginTop:16,paddingTop:16,
             borderTop:`1px solid ${e.completed?"rgba(232,23,74,0.2)":C.border}`}}>
             {e.completed
@@ -1366,20 +1456,17 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
           </div>
         )}
 
-        {/* Complement session description(s) — after the run's km */}
-        {sessions.filter(s=>sessionAction(s)!=="run").map((s,i)=><TipCard key={"alt"+i} workout={s}/>)}
-
-        {/* Feeling rating — shown when completed */}
-        {e.completed&&(
+        {/* Feeling rating — per unit, shown once logged */}
+        {s&&log.completed&&(
           <div style={{marginTop:12,paddingTop:12,
             borderTop:`1px solid rgba(232,23,74,0.2)`}}>
-            {e.feeling
+            {log.feeling
               ? <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <span style={{fontSize:24}}>{FEELINGS.find(f=>f.value===e.feeling)?.emoji}</span>
+                  <span style={{fontSize:24}}>{FEELINGS.find(f=>f.value===log.feeling)?.emoji}</span>
                   <span style={{fontSize:13,color:C.muted}}>
-                    {FEELINGS.find(f=>f.value===e.feeling)?.label}
+                    {FEELINGS.find(f=>f.value===log.feeling)?.label}
                   </span>
-                  <button onClick={()=>updDay(viewKey,{feeling:null})}
+                  <button onClick={()=>setSessionFeeling(idx,null)}
                     style={{fontSize:11,color:C.muted,background:"none",border:"none",
                       cursor:"pointer",marginLeft:"auto",
                       WebkitTapHighlightColor:"transparent"}}>change</button>
@@ -1389,7 +1476,7 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
                     textTransform:"uppercase",letterSpacing:".06em"}}>How did it feel?</div>
                   <div style={{display:"flex",gap:8}}>
                     {FEELINGS.map(f=>(
-                      <button key={f.value} onClick={()=>updDay(viewKey,{feeling:f.value})}
+                      <button key={f.value} onClick={()=>setSessionFeeling(idx,f.value)}
                         title={f.label} aria-label={f.label}
                         style={{fontSize:22,background:"none",
                           border:`1px solid ${C.border}`,borderRadius:12,
@@ -1405,31 +1492,33 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
           </div>
         )}
 
-        {/* Notes — collapsible */}
-        {notesOpen ? (
+        {/* Notes — per unit, collapsible */}
+        {s&&(notesOpen===idx ? (
           <textarea rows={2} autoFocus placeholder="Notes — how it felt, conditions…"
-            value={e.notes||""} onChange={ev=>updDay(viewKey,{notes:ev.target.value})}
-            onBlur={()=>setNotesOpen(false)}
+            value={log.notes||""} onChange={ev=>setSessionNotes(idx,ev.target.value)}
+            onBlur={()=>setNotesOpen(null)}
             style={{width:"100%",marginTop:14,border:`1px solid ${C.border}`,
               borderRadius:12,padding:"11px 14px",fontFamily:"inherit",fontSize:15,
-              color:C.text,background:e.completed?"rgba(255,255,255,.5)":C.bg,
+              color:C.text,background:log.completed?"rgba(255,255,255,.5)":C.bg,
               resize:"none",outline:"none",lineHeight:1.5,boxSizing:"border-box"}}/>
-        ) : (e.notes||"").trim() ? (
-          <div onClick={()=>setNotesOpen(true)}
+        ) : (log.notes||"").trim() ? (
+          <div onClick={()=>setNotesOpen(idx)}
             style={{display:"flex",alignItems:"flex-start",gap:8,marginTop:14,cursor:"pointer",
               WebkitTapHighlightColor:"transparent"}}>
             <p style={{margin:0,flex:1,fontSize:14,color:C.text,lineHeight:1.55,
-              whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{e.notes}</p>
+              whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{log.notes}</p>
             <span style={{fontSize:13,color:C.muted,flexShrink:0,lineHeight:1.55}}>✏️</span>
           </div>
         ) : (
-          <button onClick={()=>setNotesOpen(true)}
+          <button onClick={()=>setNotesOpen(idx)}
             style={{marginTop:14,background:"none",border:"none",cursor:"pointer",
               color:C.muted,fontSize:13,fontWeight:500,padding:"4px 0",
               WebkitTapHighlightColor:"transparent"}}>📝 Add note</button>
-        )}
+        ))}
 
       </div>
+        );
+      })}
       </div>{/* /key wrapper */}
       </div>{/* /overflow wrapper */}
 
