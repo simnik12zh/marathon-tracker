@@ -938,12 +938,11 @@ function useSwipe(onLeft, onRight) {
 
 // ─── Workout bottom sheet ───────────────────────────────────────────────────────
 // Multi-select unit picker (1–2 types), shared by Today and Week views for one day.
-// Context-aware: today/past → "log" (writes sessions + marks the day done, sets
-// kmDone for runs); future → "plan" (writes sessions only). Other = free text,
-// Rest/Sick = single immediate actions.
+// Always a "plan" action — it only writes the session/km selection, never touches
+// completed/kmDone/feeling/notes. Logging happens exclusively via the LOG circle
+// on each unit's card. Other = free text, Rest/Sick = single immediate actions.
 function WorkoutSheet({dateKey:dk,entry,updDay,onClose}) {
   const e=entry||{};
-  const isLog=dk<=todayStr();   // today or past → log; future → plan only
   const [otherMode,setOtherMode]=useState(false);
   const [otherText,setOtherText]=useState("");
   const [selected,setSelected]=useState(()=>{
@@ -979,6 +978,11 @@ function WorkoutSheet({dateKey:dk,entry,updDay,onClose}) {
     sel.includes(a) ? sel.filter(x=>x!==a)
     : sel.length>=2 ? sel : [...sel,a]);   // ignore a 3rd tap while 2 are active
 
+  // The second unit's existing log only carries over if it's still the same session
+  // (e.g. tweaking the run's type/km with Strength untouched keeps Strength's log);
+  // if the complement itself changed, its old log no longer applies.
+  const prevAlt=getSessions(e)[1];
+  const nextAlt=built[1];
   const confirmSessions=()=>{
     if (!built.length) return;
     const u={ sessions:built, workout:built.join(" + ") };
@@ -987,24 +991,22 @@ function WorkoutSheet({dateKey:dk,entry,updDay,onClose}) {
     } else {
       u.km=kmNum>0?kmNum:null;    // the distance planned/edited in the sheet
     }
-    // Second unit's log lives in `alt`: planning resets it, sheet-log marks it done too.
-    u.alt=built.length>1?(isLog?{completed:true}:null):null;
-    if (isLog) {
-      u.completed=true;
-      if (hasRun) u.kmDone=e.kmDone!=null?e.kmDone:(u.km!=null?u.km:(e.km||0));   // log km like the LOG button
-    }
-    updDay(dk,u);   // updDay fires the milestone check when completed && kmDone>0
+    if (!nextAlt) u.alt=null;
+    else if (nextAlt!==prevAlt) u.alt=null;   // complement changed → its log resets
+    // else: leave `alt` out of the update so the existing complement log is kept.
+    // completed/kmDone/feeling/notes are never touched here — only the LOG circle logs.
+    updDay(dk,u);
     onClose();
   };
   const immediate=(opt)=>{
     if (opt.action==="other") { setOtherMode(true); return; }
     if (opt.action==="rest") { updDay(dk,{sessions:[],workout:"",km:null,kmDone:null,completed:false,alt:null}); onClose(); return; }
-    if (opt.action==="sick") { updDay(dk,{sessions:["Sick / Injured"],workout:"Sick / Injured",km:null,kmDone:null,completed:isLog,alt:null}); onClose(); return; }
+    if (opt.action==="sick") { updDay(dk,{sessions:["Sick / Injured"],workout:"Sick / Injured",km:null,kmDone:null,completed:false,alt:null}); onClose(); return; }
   };
   const confirmOther=()=>{
     const t=otherText.trim();
     if (!t) return;
-    updDay(dk,{sessions:[`⋯ ${t}`],workout:`⋯ ${t}`,km:null,kmDone:null,completed:isLog,alt:null});
+    updDay(dk,{sessions:[`⋯ ${t}`],workout:`⋯ ${t}`,km:null,kmDone:null,completed:false,alt:null});
     onClose();
   };
 
@@ -1030,7 +1032,7 @@ function WorkoutSheet({dateKey:dk,entry,updDay,onClose}) {
         {otherMode ? (
           <>
             <div style={{fontSize:16,fontWeight:600,color:C.text,margin:"4px 4px 16px"}}>
-              {isLog?"What did you do?":"What's the plan?"}
+              What's the plan?
             </div>
             <div style={{display:"flex",gap:10}}>
               <input autoFocus value={otherText} onChange={ev=>setOtherText(ev.target.value)}
@@ -1049,7 +1051,7 @@ function WorkoutSheet({dateKey:dk,entry,updDay,onClose}) {
         ) : (
           <>
             <div style={{fontSize:16,fontWeight:600,color:C.text,margin:"4px 4px 4px"}}>
-              {isLog?"What did you do?":"What's the plan?"}
+              What's the plan?
             </div>
             <div style={{fontSize:12,color:C.muted,margin:"0 4px 14px"}}>
               Pick up to 2 — e.g. a run plus a complement.
@@ -1104,7 +1106,7 @@ function WorkoutSheet({dateKey:dk,entry,updDay,onClose}) {
                 background:built.length?C.done:C.muted,color:"#fff",border:"none",borderRadius:14,
                 fontFamily:"inherit",fontSize:15,fontWeight:700,
                 cursor:built.length?"pointer":"default",WebkitTapHighlightColor:"transparent"}}>
-              {built.length?`${isLog?"Log":"Save"} ${built.join(" + ")}`:(isLog?"Pick what you did":"Pick a session")}
+              {built.length?`Save ${built.join(" + ")}`:"Pick a session"}
             </button>
           </>
         )}
@@ -1180,12 +1182,16 @@ function TodayView({plan,updDay,onEdit,dayOff,setDayOff,onOpenCoach}) {
   const runType=sessions.find(s=>sessionAction(s)==="run")||"Easy run";
   const target=plannedKm(e);
   const ran=actualKm(e);
-  // Change the run's flavour (Easy/Tempo/Long/…) within the day's sessions; seed a
-  // sensible distance if the day has none yet, else keep the athlete's km.
+  // Change the run's flavour (Easy/Tempo/Long/…) within the day's sessions. The km
+  // always follows the new type's default — this selector only shows on days that
+  // aren't logged yet, and the km stepper right below stays available for a quick
+  // manual correction, so always following the type is simpler and predictable
+  // (a plan's existing km is itself just a default, not necessarily a deliberate
+  // athlete edit, so it shouldn't block the type's default from applying).
   const setRunType=(newType)=>{
     const next=getSessions(e).map(s=>sessionAction(s)==="run"?newType:s);
     const u={sessions:next,workout:next.join(" + ")};
-    if (!(e.km>0)&&RUN_DEFAULT_KM[newType]!=null) u.km=RUN_DEFAULT_KM[newType];
+    if (RUN_DEFAULT_KM[newType]!=null) u.km=RUN_DEFAULT_KM[newType];
     updDay(viewKey,u);
   };
 
